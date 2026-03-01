@@ -1,0 +1,10 @@
+# MailAI Config
+openai_api_key: "YOUR_OPENAI_KEY"
+telegram_bot_token: "YOUR_TELEGRAM_TOKEN"
+stripe_api_key: "sk_test_YOUR_KEY"
+
+pricing:
+  pro_monthly: 9
+  business_monthly: 29
+
+free_limit: 5

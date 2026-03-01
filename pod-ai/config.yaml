@@ -1,0 +1,20 @@
+# PodAI Config
+openai_api_key: "YOUR_OPENAI_KEY"
+elevenlabs_api_key: "YOUR_ELEVENLABS_KEY"
+telegram_bot_token: "YOUR_TELEGRAM_TOKEN"
+stripe_api_key: "sk_test_YOUR_KEY"
+stripe_webhook_secret: "whsec_YOUR_SECRET"
+
+pricing:
+  pro_monthly: 12
+  business_monthly: 49
+
+free_limit: 3
+
+voices:
+  - alloy
+  - echo
+  - fable
+  - onyx
+  - nova
+  - shimmer

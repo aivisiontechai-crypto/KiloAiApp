@@ -1,0 +1,9 @@
+# PodAI
+pyyaml>=6.0
+python-telegram-bot>=20.0
+openai>=1.0
+stripe>=7.0
+requests>=2.28
+beautifulsoup4>=4.11
+lxml>=4.9
+yt-dlp>=2023

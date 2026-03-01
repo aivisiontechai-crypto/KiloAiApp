@@ -1,0 +1,11 @@
+# CryptoAI News Config
+openai_api_key: "YOUR_OPENAI_KEY"
+telegram_bot_token: "YOUR_TELEGRAM_TOKEN"
+stripe_api_key: "sk_test_YOUR_KEY"
+newsapi_key: "YOUR_NEWSAPI_KEY"
+
+pricing:
+  pro_monthly: 12
+  vip_monthly: 24
+
+free_limit: 5

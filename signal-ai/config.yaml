@@ -1,0 +1,18 @@
+# SignalAI Config - Using OpenRouter!
+openrouter_api_key: "YOUR_OPENROUTER_API_KEY"
+# Get free credits at: https://openrouter.ai/
+
+openrouter_model: "openai/gpt-3.5-turbo"
+# Free models on OpenRouter:
+# - openai/gpt-3.5-turbo
+# - anthropic/claude-3-haiku
+# - google/gemini-pro
+
+telegram_bot_token: "YOUR_TELEGRAM_TOKEN"
+stripe_api_key: "sk_test_YOUR_KEY"
+
+pricing:
+  pro_monthly: 19
+  vip_monthly: 49
+
+free_limit: 3

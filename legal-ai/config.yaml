@@ -1,0 +1,20 @@
+# LegalAI Config
+openai_api_key: "YOUR_OPENAI_KEY"
+telegram_bot_token: "YOUR_TELEGRAM_TOKEN"
+stripe_api_key: "sk_test_YOUR_KEY"
+stripe_webhook_secret: "whsec_YOUR_SECRET"
+admin_user_id: "YOUR_TELEGRAM_ID"
+
+pricing:
+  pro_monthly: 29
+  business_monthly: 99
+
+documents:
+  nda: 29
+  service_contract: 39
+  privacy_policy: 49
+  terms_of_service: 49
+  employment: 59
+  demand_letter: 34
+  invoice: 19
+  llc: 79
