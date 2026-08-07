@@ -1,11 +1,12 @@
 version: "3"
-authtoken: 36cQXTHuoRnyna1ZDgWk2sZnURn_3dtV7ory39KFT93SSQ9GG
+agent:
+  authtoken: 36cQXTHuoRnyna1ZDgWk2sZnURn_3dtV7ory39KFT93SSQ9GG
 tunnels:
   dev:
+    proto: http
     addr: 5173
-    proto: http
-    url: https://zanyish-gramophonically-kohen.ngrok-free.dev
+    hostname: zanyish-gramophonically-kohen.ngrok-free.dev
   n8n:
-    addr: 5678
     proto: http
-    url: https://zanyish-gramophonically-kohen.ngrok-free.dev
+    addr: 5678
+    hostname: zanyish-gramophonically-kohen.ngrok-free.dev

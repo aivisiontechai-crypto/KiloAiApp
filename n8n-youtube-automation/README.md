@@ -9,9 +9,9 @@ npm install
 npm run dev
 ```
 
-## ngrok Setup
+## Public Tunnel
 
-This project includes ngrok configuration for exposing local services publicly.
+This project includes tunneling configuration for exposing local services publicly.
 
 ### Configuration
 
@@ -19,25 +19,26 @@ The following are set in `.env`:
 
 ```
 NGROK_AUTHTOKEN=36cQXTHuoRnyna1ZDgWk2sZnURn_3dtV7ory39KFT93SSQ9GG
-WEBHOOK_URL=https://zanyish-gramophonically-kohen.ngrok-free.dev
+WEBHOOK_URL=https://campaigns-mode-supposed-triple.trycloudflare.com
 ```
 
 ### Commands
 
 ```bash
+# Start Cloudflare Tunnel for the Vite dev server (port 5173)
+npm run tunnel
+
 # Start ngrok tunnel for the Vite dev server (port 5173)
 npm run ngrok
 
 # Start ngrok tunnel for n8n (port 5678)
 npm run ngrok:n8n
-
-# Run dev server + ngrok tunnel together
-npm run tunnel
 ```
 
-### ngrok Config
+### Tunnel Config
 
-`ngrok.yml` is included in the project root with reserved domain configuration.
+- `ngrok.yml` is included in the project root with reserved domain configuration for ngrok.
+- `cloudflared` is used as the default tunnel provider in this environment.
 
 ## Available Scripts
 
@@ -48,7 +49,7 @@ npm run tunnel
 | `npm run preview` | Preview production build |
 | `npm run ngrok` | Start ngrok tunnel for dev server |
 | `npm run ngrok:n8n` | Start ngrok tunnel for n8n |
-| `npm run tunnel` | Run dev + ngrok together |
+| `npm run tunnel` | Run Cloudflare Tunnel for dev server |
 | `npm run lint` | Run oxlint |
 
 ## n8n Integration
