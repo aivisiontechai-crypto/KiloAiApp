@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ngrok": "ngrok http 5173 --config=./ngrok.yml --log=stdout",
+    "ngrok:n8n": "ngrok http 5678 --config=./ngrok.yml --log=stdout",
+    "tunnel": "concurrently \"npm run dev\" \"npm run ngrok\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",

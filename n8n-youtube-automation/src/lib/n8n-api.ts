@@ -2,6 +2,7 @@ import axios from "axios"
 
 const N8N_API_BASE = import.meta.env.VITE_N8N_API_URL || "http://localhost:5678"
 const N8N_API_KEY = import.meta.env.VITE_N8N_API_KEY || ""
+export const WEBHOOK_URL = import.meta.env.VITE_WEBHOOK_URL || ""
 
 export interface Execution {
   id: string
@@ -51,6 +52,19 @@ export const n8nApi = {
       { headers: { Authorization: `Bearer ${N8N_API_KEY}` } }
     )
     return response.data.data.execution
+  },
+
+  triggerWebhook: async (webhookPath: string, method: string = "POST", body?: unknown): Promise<unknown> => {
+    const url = `${N8N_API_BASE}/webhook/${webhookPath}`
+    const response = await axios.request<N8nResponse<unknown>>({
+      url,
+      method: method as "POST" | "GET",
+      data: body,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+    return response.data
   },
 
   getExecutions: async (workflowId?: string): Promise<Execution[]> => {

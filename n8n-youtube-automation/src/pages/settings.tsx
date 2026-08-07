@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Save, Globe, PlayCircle, FileText, CheckCircle } from "lucide-react"
+import { Save, Globe, PlayCircle, FileText, CheckCircle, Link2, ExternalLink } from "lucide-react"
+import { WEBHOOK_URL } from "@/lib/n8n-api"
 
 export default function Settings() {
   const [n8nUrl, setN8nUrl] = useState("http://localhost:5678")
@@ -29,6 +30,7 @@ export default function Settings() {
           <TabsTrigger value="n8n">n8n</TabsTrigger>
           <TabsTrigger value="youtube">YouTube</TabsTrigger>
           <TabsTrigger value="sheets">Google Sheets</TabsTrigger>
+          <TabsTrigger value="ngrok">ngrok</TabsTrigger>
         </TabsList>
         <TabsContent value="n8n">
           <Card>
@@ -121,6 +123,50 @@ export default function Settings() {
               <Button onClick={handleSave} className="w-full">
                 {saved ? <><CheckCircle className="h-4 w-4 mr-2" /> Saved!</> : <><Save className="h-4 w-4 mr-2" /> Save Configuration</>}
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="ngrok">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                ngrok Tunnel
+              </CardTitle>
+              <CardDescription>Public webhook URL for n8n</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Webhook URL</label>
+                <Input
+                  value={WEBHOOK_URL}
+                  readOnly
+                  placeholder="Not configured"
+                />
+                {WEBHOOK_URL && (
+                  <a
+                    href={WEBHOOK_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-500 hover:underline flex items-center gap-1"
+                  >
+                    Open webhook URL <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Auth Token</label>
+                <Input
+                  type="password"
+                  value="36cQXTHuoRnyna1ZDgWk2sZnURn_3dtV7ory39KFT93SSQ9GG"
+                  readOnly
+                />
+              </div>
+              <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md">
+                <p className="font-medium mb-1">Quick Start</p>
+                <p>Run <code className="bg-background px-1 rounded">npm run ngrok</code> to start the tunnel for the dev server (port 5173).</p>
+                <p className="mt-1">Run <code className="bg-background px-1 rounded">npm run ngrok:n8n</code> to tunnel n8n (port 5678).</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

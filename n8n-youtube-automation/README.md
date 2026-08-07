@@ -1,32 +1,61 @@
-# React + TypeScript + Vite
+# YT Automate - n8n YouTube Automation Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A React dashboard for managing faceless YouTube automation workflows powered by n8n.
 
-Currently, two official plugins are available:
+## Quick Start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## ngrok Setup
+
+This project includes ngrok configuration for exposing local services publicly.
+
+### Configuration
+
+The following are set in `.env`:
+
+```
+NGROK_AUTHTOKEN=36cQXTHuoRnyna1ZDgWk2sZnURn_3dtV7ory39KFT93SSQ9GG
+WEBHOOK_URL=https://zanyish-gramophonically-kohen.ngrok-free.dev
+```
+
+### Commands
+
+```bash
+# Start ngrok tunnel for the Vite dev server (port 5173)
+npm run ngrok
+
+# Start ngrok tunnel for n8n (port 5678)
+npm run ngrok:n8n
+
+# Run dev server + ngrok tunnel together
+npm run tunnel
+```
+
+### ngrok Config
+
+`ngrok.yml` is included in the project root with reserved domain configuration.
+
+## Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |
+| `npm run ngrok` | Start ngrok tunnel for dev server |
+| `npm run ngrok:n8n` | Start ngrok tunnel for n8n |
+| `npm run tunnel` | Run dev + ngrok together |
+| `npm run lint` | Run oxlint |
+
+## n8n Integration
+
+The dashboard connects to n8n via REST API. Configure your n8n instance in Settings or via `.env`:
+
+```
+VITE_N8N_API_URL=http://localhost:5678
+VITE_N8N_API_KEY=your_n8n_api_key
+```
