@@ -11,24 +11,56 @@ let currentDrawingTool = 'none';
 let drawingPoints = [];
 let chartCanvas, chartCtx;
 
-function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(protocol + '//' + window.location.host);
-    ws.onmessage = (event) => {
-        try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'price') {
-                updatePriceCard(msg.data);
-            } else if (msg.type === 'dashboard') {
-                updateDashboard(msg.data);
-            }
-        } catch (e) {
-            console.error('WS parse error', e);
+function animateCounter(element, target, duration = 800, prefix = '', suffix = '') {
+    const start = parseFloat(element.textContent.replace(/[^0-9.\-]/g, '')) || 0;
+    const startTime = performance.now();
+    const isNegative = target < 0;
+    const absTarget = Math.abs(target);
+    const absStart = Math.abs(start);
+    
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = absStart + (absTarget - absStart) * eased;
+        const display = isNegative ? -current : current;
+        
+        if (Number.isInteger(target)) {
+            element.textContent = prefix + Math.round(display).toLocaleString() + suffix;
+        } else {
+            element.textContent = prefix + display.toFixed(2) + suffix;
         }
-    };
-    ws.onclose = () => {
-        setTimeout(connectWebSocket, 3000);
-    };
+        
+        if (progress < 1) {
+            requestAnimationFrame(update);
+        }
+    }
+    
+    requestAnimationFrame(update);
+}
+
+function addStaggeredAnimation(selector, delay = 50) {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach((el, i) => {
+        el.style.animationDelay = `${i * delay}ms`;
+        el.classList.add('fade-in-up');
+    });
+}
+
+function initPremiumEffects() {
+    addStaggeredAnimation('.price-card', 80);
+    addStaggeredAnimation('.metric', 60);
+    addStaggeredAnimation('.panel', 100);
+    
+    document.querySelectorAll('.price-card').forEach(card => {
+        card.addEventListener('mouseenter', function(e) {
+            const rect = this.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.style.setProperty('--mouse-x', `${x}px`);
+            this.style.setProperty('--mouse-y', `${y}px`);
+        });
+    });
 }
 
 function updatePriceCard(data) {
@@ -40,12 +72,28 @@ function updatePriceCard(data) {
         card.id = 'price-' + data.symbol;
         card.innerHTML = '<div class="symbol">' + data.symbol + '</div><div class="price">$0.00</div>';
         container.appendChild(card);
+        
+        setTimeout(() => {
+            card.style.animation = 'fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1)';
+        }, 50);
     }
     priceData[data.symbol].push({ time: Date.now(), price: data.price });
     if (priceData[data.symbol].length > 200) priceData[data.symbol].shift();
     const card = document.getElementById('price-' + data.symbol);
     if (card) {
-        card.querySelector('.price').textContent = '$' + data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const priceEl = card.querySelector('.price');
+        const oldPrice = parseFloat(priceEl.textContent.replace(/[^0-9.\-]/g, '')) || 0;
+        const newPrice = data.price;
+        
+        if (Math.abs(newPrice - oldPrice) > 0.01) {
+            priceEl.style.transition = 'color 0.3s ease';
+            priceEl.style.color = newPrice > oldPrice ? 'var(--accent-buy)' : newPrice < oldPrice ? 'var(--accent-sell)' : 'var(--text-primary)';
+            setTimeout(() => {
+                priceEl.style.color = 'var(--text-primary)';
+            }, 500);
+        }
+        
+        priceEl.textContent = '$' + newPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
     if (data.symbol === currentChartSymbol && priceChart) {
         if (currentChartType === 'line') {
@@ -580,8 +628,12 @@ async function submitQuickTrade() {
     const qty = parseFloat(document.getElementById('tradeQty').value);
     const type = document.getElementById('tradeType').value;
     const price = document.getElementById('tradePrice').value;
+    const extra = document.getElementById('tradeExtra').value;
     const body = { symbol, side, quantity: qty, order_type: type };
     if (price) body.limit_price = parseFloat(price);
+    if (type === 'trailing_stop' && extra) body.trail_percent = parseFloat(extra);
+    if (type === 'iceberg' && extra) body.metadata = { display_size: parseFloat(extra) };
+    if (type === 'vwap') body.time_in_force = 'day';
     const res = await fetch('/api/orders', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -589,6 +641,24 @@ async function submitQuickTrade() {
     });
     const data = await res.json();
     alert('Order submitted: ' + (data.order_id || 'error'));
+}
+
+function updateTradeFields() {
+    const type = document.getElementById('tradeType').value;
+    const extra = document.getElementById('tradeExtra');
+    const price = document.getElementById('tradePrice');
+    if (type === 'trailing_stop') {
+        extra.style.display = 'block';
+        extra.placeholder = 'Trail %';
+        price.placeholder = 'Stop Price';
+    } else if (type === 'iceberg') {
+        extra.style.display = 'block';
+        extra.placeholder = 'Display Size';
+        price.placeholder = 'Limit Price';
+    } else {
+        extra.style.display = 'none';
+        price.placeholder = type === 'market' ? 'N/A' : 'Limit Price';
+    }
 }
 
 async function submitBracketOrder() {

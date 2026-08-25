@@ -42,14 +42,18 @@
                     </div>
                     <div class="account-controls">
                         <input type="number" id="tradeQty" placeholder="Qty" value="0.01" step="0.01">
-                        <select id="tradeType">
+                        <select id="tradeType" onchange="updateTradeFields()">
                             <option value="market">Market</option>
                             <option value="limit">Limit</option>
                             <option value="stop_loss">Stop</option>
+                            <option value="trailing_stop">Trailing Stop</option>
+                            <option value="iceberg">Iceberg</option>
+                            <option value="vwap">VWAP</option>
                         </select>
                     </div>
                     <div class="account-controls">
                         <input type="number" id="tradePrice" placeholder="Limit Price">
+                        <input type="number" id="tradeExtra" placeholder="Trail % / Display" style="display:none">
                         <button class="primary" onclick="submitQuickTrade()">Submit</button>
                     </div>
                     <div style="margin-top:10px">
