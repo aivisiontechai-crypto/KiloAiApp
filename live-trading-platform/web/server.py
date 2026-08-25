@@ -61,7 +61,7 @@ async def start_server(host: str = "0.0.0.0", port: int = 9000) -> None:
 
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    global trader, data_manager, running, alert_manager, watchlist_manager
+    global trader, data_manager, running, alert_manager, watchlist_manager, scheduler, calendar, accounts, current_account, webhook_manager
     try:
         request = await reader.read(65536)
         if not request:
@@ -189,7 +189,6 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 asyncio.create_task(_price_loop())
                 asyncio.create_task(_autonomous_loop())
                 asyncio.create_task(_dashboard_broadcast_loop())
-                global scheduler
                 scheduler = TradeScheduler(trader.engine)
                 asyncio.create_task(scheduler.start())
                 calendar.seed_sample_events()
@@ -200,7 +199,6 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             await writer.drain()
 
         elif path == "/api/stop" and method == "POST":
-            global scheduler
             if trader:
                 await trader.stop()
                 trader = None
@@ -449,7 +447,6 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
         elif path.startswith("/api/accounts/") and method == "POST" and path.endswith("/switch"):
             account_id = path.split("/")[3]
             if account_id in accounts:
-                global current_account
                 current_account = account_id
                 result = {"switched": True, "account": account_id}
             else:
