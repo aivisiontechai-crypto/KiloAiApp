@@ -16,6 +16,8 @@ from src.data.models import AssetClass
 from src.engine.alerts import AlertCondition, AlertManager
 from src.engine.autonomous_trader import AutonomousTrader, RiskManager
 from src.engine.drawing_tools import DrawingTools
+from src.engine.scheduler import TradeScheduler
+from src.engine.calendar import EconomicCalendar
 from src.engine.execution_engine import ExecutionEngine
 from src.engine.news import NewsSentimentEngine
 from src.engine.options import OptionsEngine
@@ -40,7 +42,11 @@ data_manager = None
 alert_manager = None
 watchlist_manager = None
 webhook_manager = WebhookManager()
+scheduler = None
+calendar = EconomicCalendar()
 websocket_connections = set()
+accounts = {"default": {"name": "Default", "balance": 50000.0, "currency": "USD"}}
+current_account = "default"
 
 
 def json_dumps(obj):
@@ -183,6 +189,10 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                 asyncio.create_task(_price_loop())
                 asyncio.create_task(_autonomous_loop())
                 asyncio.create_task(_dashboard_broadcast_loop())
+                global scheduler
+                scheduler = TradeScheduler(trader.engine)
+                asyncio.create_task(scheduler.start())
+                calendar.seed_sample_events()
                 running = True
                 result = {"status": "started"}
             body_out = json_dumps(result).encode()
@@ -190,12 +200,16 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             await writer.drain()
 
         elif path == "/api/stop" and method == "POST":
+            global scheduler
             if trader:
                 await trader.stop()
                 trader = None
             if data_manager:
                 await data_manager.stop()
                 data_manager = None
+            if scheduler:
+                await scheduler.stop()
+                scheduler = None
             running = False
             result = {"status": "stopped"}
             body_out = json_dumps(result).encode()
@@ -267,6 +281,179 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         result = {"id": alert.id, "status": "created"}
                     except Exception as exc:
                         result = {"error": str(exc)}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/ai/research" and method == "POST":
+            result = {}
+            if not trader or not data_manager:
+                result = {"error": "Trader not running"}
+            else:
+                try:
+                    from src.ai.strategy_researcher import StrategyResearcher
+                    from src.ai.optimizer import WalkForwardOptimizer
+                    researcher = StrategyResearcher()
+                    optimizer = WalkForwardOptimizer()
+                    result = {
+                        "status": "ok",
+                        "researcher": "StrategyResearcher initialized",
+                        "optimizer": "WalkForwardOptimizer initialized",
+                    }
+                except Exception as exc:
+                    result = {"error": str(exc)}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/ai/backtest" and method == "POST":
+            result = {}
+            if not trader or not data_manager:
+                result = {"error": "Trader not running"}
+            else:
+                try:
+                    data = json.loads(body.decode()) if body else {}
+                    from src.ai.backtest_engine import BacktestEngine
+                    from src.ai.monte_carlo import MonteCarloBacktester
+                    adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                    if adapter:
+                        import asyncio as _asyncio
+                        loop = _asyncio.get_event_loop()
+                        symbol = data.get("symbol", "BTC-USD")
+                        candles = loop.run_until_complete(adapter.get_historical_candles(symbol, limit=200))
+                        if candles:
+                            backtest = BacktestEngine()
+                            mc = MonteCarloBacktester(backtest, simulations=500)
+                            mc_result = mc.run_monte_carlo(None, candles, AssetClass.CRYPTO)
+                            result = {
+                                "expected_return": mc_result.expected_return,
+                                "std_dev": mc_result.std_dev,
+                                "median_return": mc_result.median_return,
+                                "percentile_5": mc_result.percentile_5,
+                                "percentile_95": mc_result.percentile_95,
+                                "max_drawdown_avg": mc_result.max_drawdown_avg,
+                                "success_probability": mc_result.success_probability,
+                            }
+                        else:
+                            result = {"error": "No candle data"}
+                    else:
+                        result = {"error": "No adapter"}
+                except Exception as exc:
+                    result = {"error": str(exc)}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/ai/optimize" and method == "POST":
+            result = {}
+            if not trader or not data_manager:
+                result = {"error": "Trader not running"}
+            else:
+                try:
+                    from src.ai.optimizer import WalkForwardOptimizer
+                    data = json.loads(body.decode()) if body else {}
+                    optimizer = WalkForwardOptimizer()
+                    result = {
+                        "status": "optimization_started",
+                        "strategy": data.get("strategy", "unknown"),
+                        "parameters": data.get("parameters", {}),
+                    }
+                except Exception as exc:
+                    result = {"error": str(exc)}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/scheduler" and method == "GET":
+            result = []
+            if scheduler:
+                result = scheduler.get_scheduled()
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/scheduler" and method == "POST":
+            result = {"error": "Trader not running"}
+            if scheduler and trader:
+                data = json.loads(body.decode()) if body else {}
+                execute_at_str = data.get("execute_at")
+                execute_at = datetime.fromisoformat(execute_at_str) if execute_at_str else datetime.utcnow()
+                from src.data.models import Side as DBSide
+                recurring = data.get("recurring", False)
+                interval = data.get("interval_seconds")
+                scheduled = scheduler.schedule_order(
+                    symbol=data.get("symbol", ""),
+                    side=DBSide(data.get("side", "buy")),
+                    quantity=Decimal(str(data.get("quantity", 0.01))),
+                    order_type=OrderType(data.get("order_type", "market")),
+                    limit_price=Decimal(str(data["limit_price"])) if data.get("limit_price") else None,
+                    stop_price=Decimal(str(data["stop_price"])) if data.get("stop_price") else None,
+                    asset_class=AssetClass(data.get("asset_class", "crypto")),
+                    execute_at=execute_at,
+                    recurring=recurring,
+                    interval_seconds=interval,
+                )
+                result = scheduled.to_dict()
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path.startswith("/api/scheduler/") and method == "DELETE":
+            result = {"cancelled": False}
+            if scheduler:
+                scheduled_id = path.split("/")[3]
+                result = {"cancelled": scheduler.cancel_scheduled(scheduled_id)}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/calendar" and method == "GET":
+            result = calendar.get_upcoming(hours=48)
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/options/chain" and method == "GET":
+            symbol = request_line.split("?")[1].split("=")[1] if "?" in request_line else "BTC-USD"
+            result = []
+            if trader:
+                options_engine = OptionsEngine()
+                current_prices = {s: float(p.value) for s, p in trader._last_price.items()}
+                chain = options_engine.get_options_chain(symbol, current_prices.get(symbol, 0))
+                result = chain
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/accounts" and method == "GET":
+            result = {"accounts": list(accounts.values()), "current": current_account}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/accounts" and method == "POST":
+            data = json.loads(body.decode()) if body else {}
+            account_id = data.get("id")
+            name = data.get("name", account_id)
+            balance = data.get("balance", 50000.0)
+            currency = data.get("currency", "USD")
+            if account_id:
+                accounts[account_id] = {"name": name, "balance": balance, "currency": currency}
+                result = {"id": account_id, "name": name}
+            else:
+                result = {"error": "id required"}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path.startswith("/api/accounts/") and method == "POST" and path.endswith("/switch"):
+            account_id = path.split("/")[3]
+            if account_id in accounts:
+                global current_account
+                current_account = account_id
+                result = {"switched": True, "account": account_id}
+            else:
+                result = {"error": "Account not found"}
             body_out = json_dumps(result).encode()
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
             await writer.drain()
@@ -648,10 +835,19 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         "/api/reports/tax",
                         "/api/scanner/scan",
                         "/api/options/greeks",
+                        "/api/options/chain",
                         "/api/ai/research",
                         "/api/ai/backtest",
                         "/api/ai/optimize",
                         "/api/ai/monte-carlo",
+                        "/api/scheduler",
+                        "/api/calendar",
+                        "/api/accounts",
+                        "/api/drawings",
+                        "/api/timesales",
+                        "/api/account/statement",
+                        "/api/webhooks",
+                        "/api/external/api",
                     ],
                 }
             body_out = json_dumps(result).encode()
@@ -849,6 +1045,21 @@ async def _dashboard_broadcast_loop() -> None:
                     }
                 except Exception as exc:
                     logger.error("Statement error: %s", exc)
+                calendar_events = calendar.get_upcoming(hours=48)
+                depth_data = {}
+                if data_manager:
+                    try:
+                        adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                        if adapter:
+                            book = await adapter.get_order_book("BTC-USD", 10)
+                            if book:
+                                depth_data = {
+                                    "symbol": book.symbol,
+                                    "bids": [{"price": float(b.price), "quantity": float(b.quantity)} for b in book.bids],
+                                    "asks": [{"price": float(a.price), "quantity": float(a.quantity)} for a in book.asks],
+                                }
+                    except Exception as exc:
+                        logger.error("Depth error: %s", exc)
                 await broadcast_ws({
                     "type": "dashboard",
                     "data": {
@@ -866,6 +1077,8 @@ async def _dashboard_broadcast_loop() -> None:
                         "journal": journal_data,
                         "time_sales": time_sales,
                         "statement": statement,
+                        "calendar": calendar_events,
+                        "depth": depth_data,
                     },
                 })
             await asyncio.sleep(2)

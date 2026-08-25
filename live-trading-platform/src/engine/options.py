@@ -141,3 +141,33 @@ class OptionsEngine:
             "total_rho": total_rho,
             "positions": details,
         }
+
+    def get_options_chain(self, underlying: str, underlying_price: float) -> list[dict]:
+        strikes = [underlying_price * 0.9, underlying_price * 0.95, underlying_price, underlying_price * 1.05, underlying_price * 1.1]
+        strikes = [round(s, 2) for s in strikes]
+        chain = []
+        for strike in strikes:
+            for opt_type in ["call", "put"]:
+                contract = OptionContract(
+                    symbol=f"{underlying}_{opt_type[0].upper()}{strike}",
+                    underlying=underlying,
+                    strike=Decimal(str(strike)),
+                    expiry="2025-12-31",
+                    option_type=opt_type,
+                    quantity=Decimal("1"),
+                    premium=Decimal(str(max(underlying_price - strike if opt_type == "call" else strike - underlying_price, 0.01))),
+                    implied_volatility=0.3,
+                )
+                greeks = BlackScholes.calculate_greeks(contract, Decimal(str(underlying_price)), self.risk_free_rate, 30)
+                chain.append({
+                    "symbol": contract.symbol,
+                    "type": opt_type,
+                    "strike": float(contract.strike),
+                    "premium": float(contract.premium),
+                    "delta": greeks.delta,
+                    "gamma": greeks.gamma,
+                    "theta": greeks.theta,
+                    "vega": greeks.vega,
+                    "iv": greeks.iv,
+                })
+        return chain

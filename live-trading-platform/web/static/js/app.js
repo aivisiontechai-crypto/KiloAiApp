@@ -1,7 +1,15 @@
 let ws = null;
 let priceChart = null;
+let depthChart = null;
 let priceData = {};
+let candleData = {};
 let currentChartSymbol = 'BTC-USD';
+let currentChartType = 'line';
+let currentTimeframe = '1m';
+let drawings = [];
+let currentDrawingTool = 'none';
+let drawingPoints = [];
+let chartCanvas, chartCtx;
 
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -30,7 +38,7 @@ function updatePriceCard(data) {
         const card = document.createElement('div');
         card.className = 'price-card';
         card.id = 'price-' + data.symbol;
-        card.innerHTML = '<div class=\"symbol\">' + data.symbol + '</div><div class=\"price\">$0.00</div>';
+        card.innerHTML = '<div class="symbol">' + data.symbol + '</div><div class="price">$0.00</div>';
         container.appendChild(card);
     }
     priceData[data.symbol].push({ time: Date.now(), price: data.price });
@@ -40,9 +48,142 @@ function updatePriceCard(data) {
         card.querySelector('.price').textContent = '$' + data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
     if (data.symbol === currentChartSymbol && priceChart) {
-        priceChart.data.labels = priceData[data.symbol].map(d => new Date(d.time).toLocaleTimeString());
-        priceChart.data.datasets[0].data = priceData[data.symbol].map(d => d.price);
-        priceChart.update('none');
+        if (currentChartType === 'line') {
+            priceChart.data.labels = priceData[data.symbol].map(d => new Date(d.time).toLocaleTimeString());
+            priceChart.data.datasets[0].data = priceData[data.symbol].map(d => d.price);
+            priceChart.update('none');
+        } else {
+            updateCandleData(data.symbol, data.price);
+            drawCandles();
+        }
+    }
+}
+
+function updateCandleData(symbol, price) {
+    if (!candleData[symbol]) candleData[symbol] = [];
+    const now = new Date();
+    const lastCandle = candleData[symbol][candleData[symbol].length - 1];
+    if (lastCandle && now - lastCandle.time < 60000) {
+        lastCandle.close = price;
+        lastCandle.high = Math.max(lastCandle.high, price);
+        lastCandle.low = Math.min(lastCandle.low, price);
+    } else {
+        candleData[symbol].push({ time: now, open: price, high: price, low: price, close: price, volume: 0 });
+        if (candleData[symbol].length > 200) candleData[symbol].shift();
+    }
+}
+
+function toHeikinAshi(candles) {
+    if (!candles.length) return [];
+    result = [];
+    for (let i = 0; i < candles.length; i++) {
+        const c = candles[i];
+        if (i === 0) {
+            result.push({
+                time: c.time,
+                open: (c.open + c.close) / 2,
+                high: c.high,
+                low: c.low,
+                close: (c.open + c.high + c.low + c.close) / 4,
+                volume: c.volume,
+            });
+        } else {
+            const prev = result[i - 1];
+            result.push({
+                time: c.time,
+                open: (prev.open + prev.close) / 2,
+                high: Math.max(c.high, (prev.open + prev.close) / 2),
+                low: Math.min(c.low, (prev.open + prev.close) / 2),
+                close: (c.open + c.high + c.low + c.close) / 4,
+                volume: c.volume,
+            });
+        }
+    }
+    return result;
+}
+
+function drawCandles() {
+    if (!chartCtx || !candleData[currentChartSymbol]) return;
+    const candles = currentChartType === 'heikin-ashi' ? toHeikinAshi(candleData[currentChartSymbol]) : candleData[currentChartSymbol];
+    if (!candles.length) return;
+    const width = chartCanvas.width;
+    const height = chartCanvas.height;
+    chartCtx.clearRect(0, 0, width, height);
+    chartCtx.fillStyle = '#111827';
+    chartCtx.fillRect(0, 0, width, height);
+    const prices = candles.flatMap(c => [c.high, c.low]);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const padding = 40;
+    const candleWidth = Math.max((width - padding * 2) / candles.length - 2, 1);
+    const scale = (height - padding * 2) / (maxPrice - minPrice || 1);
+    for (let i = 0; i < candles.length; i++) {
+        const c = candles[i];
+        const x = padding + i * (candleWidth + 2);
+        const isGreen = c.close >= c.open;
+        chartCtx.strokeStyle = isGreen ? '#00c853' : '#ff1744';
+        chartCtx.fillStyle = isGreen ? '#00c853' : '#ff1744';
+        const wickTop = padding + (maxPrice - c.high) * scale;
+        const wickBottom = padding + (maxPrice - c.low) * scale;
+        const bodyTop = padding + (maxPrice - Math.max(c.open, c.close)) * scale;
+        const bodyBottom = padding + (maxPrice - Math.min(c.open, c.close)) * scale;
+        chartCtx.beginPath();
+        chartCtx.moveTo(x + candleWidth / 2, wickTop);
+        chartCtx.lineTo(x + candleWidth / 2, wickBottom);
+        chartCtx.stroke();
+        const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
+        chartCtx.fillRect(x, bodyTop, candleWidth, bodyHeight);
+    }
+    drawDrawings(candles, minPrice, maxPrice, scale, padding, candleWidth);
+}
+
+function drawDrawings(candles, minPrice, maxPrice, scale, padding, candleWidth) {
+    if (!chartCtx || !drawings.length) return;
+    for (const drawing of drawings) {
+        if (drawing.type === 'trendline' && drawing.points.length >= 2) {
+            chartCtx.strokeStyle = drawing.color || '#00d4ff';
+            chartCtx.lineWidth = 2;
+            chartCtx.beginPath();
+            const p1 = drawing.points[0];
+            const p2 = drawing.points[1];
+            const x1 = padding + p1.index * (candleWidth + 2) + candleWidth / 2;
+            const y1 = padding + (maxPrice - p1.price) * scale;
+            const x2 = padding + p2.index * (candleWidth + 2) + candleWidth / 2;
+            const y2 = padding + (maxPrice - p2.price) * scale;
+            chartCtx.moveTo(x1, y1);
+            chartCtx.lineTo(x2, y2);
+            chartCtx.stroke();
+        } else if (drawing.type === 'horizontal') {
+            chartCtx.strokeStyle = drawing.color || '#00d4ff';
+            chartCtx.lineWidth = 1;
+            chartCtx.setLineDash([5, 5]);
+            const y = padding + (maxPrice - drawing.price) * scale;
+            chartCtx.beginPath();
+            chartCtx.moveTo(padding, y);
+            chartCtx.lineTo(chartCanvas.width - padding, y);
+            chartCtx.stroke();
+            chartCtx.setLineDash([]);
+        } else if (drawing.type === 'fibonacci' && drawing.points.length >= 2) {
+            chartCtx.strokeStyle = drawing.color || '#00d4ff';
+            chartCtx.lineWidth = 1;
+            const p1 = drawing.points[0];
+            const p2 = drawing.points[1];
+            const x1 = padding + p1.index * (candleWidth + 2) + candleWidth / 2;
+            const x2 = padding + p2.index * (candleWidth + 2) + candleWidth / 2;
+            const y1 = padding + (maxPrice - p1.price) * scale;
+            const y2 = padding + (maxPrice - p2.price) * scale;
+            const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+            chartCtx.font = '10px monospace';
+            chartCtx.fillStyle = drawing.color || '#00d4ff';
+            for (const level of levels) {
+                const y = y1 + (y2 - y1) * level;
+                chartCtx.beginPath();
+                chartCtx.moveTo(x1, y);
+                chartCtx.lineTo(x2, y);
+                chartCtx.stroke();
+                chartCtx.fillText((level * 100).toFixed(1) + '%', x2 + 5, y + 3);
+            }
+        }
     }
 }
 
@@ -61,7 +202,7 @@ function updateDashboard(data) {
     }
     if (data.health) {
         const container = document.getElementById('strategyHealth');
-        container.innerHTML = data.health.map(h => '<div class=\"strategy-card\"><div class=\"name\">' + h.name + '</div><div class=\"metrics\"><div class=\"metric-item\"><span class=\"metric-label\">Trades</span><span class=\"metric-value\">' + (h.trades || 0) + '</span></div><div class=\"metric-item\"><span class=\"metric-label\">PnL</span><span class=\"metric-value\">$' + (h.pnl || 0).toFixed(2) + '</span></div></div></div>').join('');
+        container.innerHTML = data.health.map(h => '<div class="strategy-card"><div class="name">' + h.name + '</div><div class="metrics"><div class="metric-item"><span class="metric-label">Trades</span><span class="metric-value">' + (h.trades || 0) + '</span></div><div class="metric-item"><span class="metric-label">PnL</span><span class="metric-value">$' + (h.pnl || 0).toFixed(2) + '</span></div></div></div>').join('');
     }
     if (data.improvements) {
         const tbody = document.querySelector('#improvementsTable tbody');
@@ -75,7 +216,7 @@ function updateDashboard(data) {
     }
     if (data.news) {
         const container = document.getElementById('newsContainer');
-        container.innerHTML = data.news.slice(0, 10).map(n => '<div class=\"news-item\"><div class=\"news-title\">' + n.title + '</div><div class=\"news-meta\">' + n.symbol + ' | ' + n.source + ' | Sentiment: ' + (n.sentiment > 0 ? '+' : '') + n.sentiment.toFixed(2) + '</div></div>').join('');
+        container.innerHTML = data.news.slice(0, 10).map(n => '<div class="news-item"><div class="news-title">' + n.title + '</div><div class="news-meta">' + n.symbol + ' | ' + n.source + ' | Sentiment: ' + (n.sentiment > 0 ? '+' : '') + n.sentiment.toFixed(2) + '</div></div>').join('');
     }
     if (data.options) {
         document.getElementById('optDelta').textContent = (data.options.total_delta || 0).toFixed(4);
@@ -125,6 +266,8 @@ function updateDashboard(data) {
     if (data.time_sales) {
         const tbody = document.querySelector('#timeSalesTable tbody');
         tbody.innerHTML = data.time_sales.slice(-20).reverse().map(t => '<tr><td>' + new Date(t.timestamp).toLocaleTimeString() + '</td><td>' + t.symbol + '</td><td>' + t.price + '</td><td>' + t.quantity + '</td><td>' + t.side + '</td></tr>').join('');
+        const table = document.getElementById('timeSalesTable');
+        if (table) table.scrollTop = table.scrollHeight;
     }
     if (data.statement) {
         document.getElementById('stmtTotal').textContent = '$' + (data.statement.total_value || 0).toFixed(2);
@@ -132,6 +275,26 @@ function updateDashboard(data) {
         document.getElementById('stmtFees').textContent = '$' + (data.statement.total_fees || 0).toFixed(2);
         document.getElementById('stmtTrades').textContent = data.statement.trade_count || 0;
     }
+    if (data.calendar) {
+        const container = document.getElementById('calendarContainer');
+        container.innerHTML = data.calendar.map(e => '<div class="calendar-event impact-' + e.impact + '"><div class="event-title">' + e.title + '</div><div class="event-meta">' + e.currency + ' | ' + new Date(e.event_time).toLocaleTimeString() + ' | Forecast: ' + (e.forecast || '-') + '</div></div>').join('');
+    }
+    if (data.depth) {
+        updateDepthChart(data.depth);
+    }
+}
+
+function updateDepthChart(depthData) {
+    if (!depthChart || !depthData.bids || !depthData.asks) return;
+    const bids = depthData.bids.slice(0, 10);
+    const asks = depthData.asks.slice(0, 10);
+    const labels = [...bids.map(b => b.price.toFixed(2)), ...asks.map(a => a.price.toFixed(2))];
+    const bidData = bids.map(b => b.quantity);
+    const askData = asks.map(a => a.quantity);
+    depthChart.data.labels = labels;
+    depthChart.data.datasets[0].data = bidData;
+    depthChart.data.datasets[1].data = askData;
+    depthChart.update('none');
 }
 
 async function startPlatform() {
@@ -161,27 +324,120 @@ function switchChart(symbol) {
     document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
     if (!priceData[symbol]) priceData[symbol] = [];
-    priceChart.data.labels = priceData[symbol].map(d => new Date(d.time).toLocaleTimeString());
-    priceChart.data.datasets[0].data = priceData[symbol].map(d => d.price);
-    priceChart.data.datasets[0].label = symbol;
-    priceChart.update();
-}
-
-function changeChartType() {
-    const type = document.getElementById('chartType').value;
-    if (priceChart) {
-        priceChart.config.type = type === 'candlestick' || type === 'heikin-ashi' ? 'line' : type;
+    if (!candleData[symbol]) candleData[symbol] = [];
+    if (currentChartType === 'line') {
+        priceChart.data.labels = priceData[symbol].map(d => new Date(d.time).toLocaleTimeString());
+        priceChart.data.datasets[0].data = priceData[symbol].map(d => d.price);
+        priceChart.data.datasets[0].label = symbol;
         priceChart.update();
+    } else {
+        drawCandles();
     }
 }
 
+function changeChartType() {
+    currentChartType = document.getElementById('chartType').value;
+    if (currentChartType === 'line') {
+        if (priceChart) {
+            priceChart.config.type = 'line';
+            priceChart.data.labels = priceData[currentChartSymbol].map(d => new Date(d.time).toLocaleTimeString());
+            priceChart.data.datasets[0].data = priceData[currentChartSymbol].map(d => d.price);
+            priceChart.update();
+        }
+    } else {
+        if (priceChart) {
+            priceChart.config.type = 'line';
+            priceChart.update('none');
+        }
+        drawCandles();
+    }
+}
+
+function changeTimeframe() {
+    currentTimeframe = document.getElementById('chartTimeframe').value;
+}
+
+function changeDrawingTool() {
+    currentDrawingTool = document.getElementById('drawingTool').value;
+    drawingPoints = [];
+}
+
 function initChart() {
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    priceChart = new Chart(ctx, {
+    chartCanvas = document.getElementById('priceChart');
+    chartCtx = chartCanvas.getContext('2d');
+    chartCanvas.width = chartCanvas.parentElement.clientWidth;
+    chartCanvas.height = 400;
+    priceChart = new Chart(chartCanvas, {
         type: 'line',
         data: { labels: [], datasets: [{ label: currentChartSymbol, data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0, 212, 255, 0.1)', tension: 0.1, fill: true }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } } } }
     });
+    chartCanvas.addEventListener('click', onChartClick);
+    chartCanvas.addEventListener('mousemove', onChartMouseMove);
+}
+
+function onChartClick(e) {
+    if (currentDrawingTool === 'none') return;
+    const rect = chartCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const padding = 40;
+    const candleWidth = Math.max((chartCanvas.width - padding * 2) / (candleData[currentChartSymbol]?.length || 1) - 2, 1);
+    const index = Math.floor((x - padding) / (candleWidth + 2));
+    const candles = currentChartType === 'heikin-ashi' ? toHeikinAshi(candleData[currentChartSymbol] || []) : (candleData[currentChartSymbol] || []);
+    if (index < 0 || index >= candles.length) return;
+    const price = getPriceFromY(y, candles);
+    drawingPoints.push({ index, price, x, y });
+    if (currentDrawingTool === 'trendline' && drawingPoints.length >= 2) {
+        saveDrawing('trendline', drawingPoints.slice(-2));
+        drawingPoints = [];
+    } else if (currentDrawingTool === 'fibonacci' && drawingPoints.length >= 2) {
+        saveDrawing('fibonacci', drawingPoints.slice(-2));
+        drawingPoints = [];
+    } else if (currentDrawingTool === 'horizontal') {
+        saveDrawing('horizontal', [{ price }]);
+        drawingPoints = [];
+    }
+}
+
+function onChartMouseMove(e) {
+    if (currentDrawingTool === 'none' || drawingPoints.length === 0) return;
+    const rect = chartCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    drawCandles();
+    const ctx = chartCtx;
+    ctx.strokeStyle = '#00d4ff';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(drawingPoints[0].x, drawingPoints[0].y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+}
+
+function getPriceFromY(y, candles) {
+    const padding = 40;
+    const height = chartCanvas.height;
+    const prices = candles.flatMap(c => [c.high, c.low]);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const scale = (height - padding * 2) / (maxPrice - minPrice || 1);
+    return maxPrice - (y - padding) / scale;
+}
+
+async function saveDrawing(type, points) {
+    const res = await fetch('/api/drawings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ tool_type: type, symbol: currentChartSymbol, points, color: '#00d4ff' })
+    });
+    const data = await res.json();
+    if (data.id) {
+        drawings.push({ id: data.id, type, points, color: '#00d4ff' });
+        drawCandles();
+    }
 }
 
 function initDepthChart() {
@@ -210,7 +466,42 @@ async function loadWebhooks() {
     const res = await fetch('/api/webhooks');
     const data = await res.json();
     const container = document.getElementById('webhookList');
-    container.innerHTML = data.map(w => '<div class=\"webhook-item\"><span>' + w.url + '</span><span>' + w.events.join(', ') + '</span><span>' + (w.active ? 'Active' : 'Inactive') + '</span></div>').join('');
+    container.innerHTML = data.map(w => '<div class="webhook-item"><span>' + w.url + '</span><span>' + w.events.join(', ') + '</span><span>' + (w.active ? 'Active' : 'Inactive') + '</span></div>').join('');
+}
+
+async function loadAccounts() {
+    const res = await fetch('/api/accounts');
+    const data = await res.json();
+    const select = document.getElementById('accountSelect');
+    select.innerHTML = data.accounts.map(a => '<option value="' + a.name + '"' + (a.name === data.current ? ' selected' : '') + '>' + a.name + ' ($' + a.balance.toLocaleString() + ')</option>').join('');
+    const list = document.getElementById('accountList');
+    list.innerHTML = data.accounts.map(a => '<div class="account-card"><div class="account-name">' + a.name + '</div><div class="account-balance">$' + a.balance.toLocaleString() + ' ' + a.currency + '</div></div>').join('');
+}
+
+async function switchAccount() {
+    const name = document.getElementById('accountSelect').value;
+    await fetch('/api/accounts/' + name + '/switch', { method: 'POST' });
+    loadAccounts();
+}
+
+async function createAccount() {
+    const name = prompt('Account name:');
+    if (!name) return;
+    const balance = parseFloat(prompt('Initial balance:', '50000'));
+    await fetch('/api/accounts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ id: name.toLowerCase().replace(/\s+/g, '_'), name, balance })
+    });
+    loadAccounts();
+}
+
+async function loadOptionsChain() {
+    const symbol = currentChartSymbol;
+    const res = await fetch('/api/options/chain?symbol=' + symbol);
+    const data = await res.json();
+    const tbody = document.querySelector('#optionsChainTable tbody');
+    tbody.innerHTML = data.map(o => '<tr><td>' + o.symbol + '</td><td>' + o.type + '</td><td>' + o.strike + '</td><td>' + o.premium.toFixed(2) + '</td><td>' + o.delta.toFixed(4) + '</td><td>' + o.gamma.toFixed(4) + '</td><td>' + o.theta.toFixed(4) + '</td><td>' + o.vega.toFixed(4) + '</td></tr>').join('');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -218,6 +509,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initDepthChart();
     connectWebSocket();
     loadWebhooks();
+    loadAccounts();
+    loadOptionsChain();
+    setInterval(loadAccounts, 30000);
+    setInterval(loadOptionsChain, 30000);
     setInterval(async () => {
         const res = await fetch('/api/status');
         const data = await res.json();
@@ -248,8 +543,8 @@ async function runScanner() {
     const data = await res.json();
     const container = document.getElementById('scanResults');
     if (data.length === 0) {
-        container.innerHTML = '<div class=\"scan-result-card\"><div class=\"symbol\">No results</div></div>';
+        container.innerHTML = '<div class="scan-result-card"><div class="symbol">No results</div></div>';
     } else {
-        container.innerHTML = data.map(r => '<div class=\"scan-result-card\"><div class=\"symbol\">' + r.symbol + '</div><div class=\"signal\">' + r.signal + '</div><div class=\"confidence\">Confidence: ' + (r.confidence * 100).toFixed(1) + '%</div></div>').join('');
+        container.innerHTML = data.map(r => '<div class="scan-result-card"><div class="symbol">' + r.symbol + '</div><div class="signal">' + r.signal + '</div><div class="confidence">Confidence: ' + (r.confidence * 100).toFixed(1) + '%</div></div>').join('');
     }
 }

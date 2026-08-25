@@ -82,6 +82,32 @@
         </section>
 
         <section class="panel">
+            <h2>Account Manager</h2>
+            <div class="account-controls">
+                <select id="accountSelect" onchange="switchAccount()">
+                    <option value="default">Default ($50,000)</option>
+                </select>
+                <button onclick="createAccount()">New Account</button>
+            </div>
+            <div id="accountList" class="account-list"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Economic Calendar</h2>
+            <div id="calendarContainer" class="calendar-container"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Options Chain</h2>
+            <div class="table-container">
+                <table id="optionsChainTable">
+                    <thead><tr><th>Symbol</th><th>Type</th><th>Strike</th><th>Premium</th><th>Delta</th><th>Gamma</th><th>Theta</th><th>Vega</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
             <h2>Price Chart</h2>
             <div class="chart-tabs">
                 <button class="chart-tab active" onclick="switchChart('BTC-USD')">BTC-USD</button>
@@ -92,6 +118,20 @@
                     <option value="line">Line</option>
                     <option value="candlestick">Candlestick</option>
                     <option value="heikin-ashi">Heikin-Ashi</option>
+                </select>
+                <select id="chartTimeframe" onchange="changeTimeframe()">
+                    <option value="1m">1m</option>
+                    <option value="5m">5m</option>
+                    <option value="15m">15m</option>
+                    <option value="1h">1h</option>
+                    <option value="4h">4h</option>
+                    <option value="1d">1d</option>
+                </select>
+                <select id="drawingTool" onchange="changeDrawingTool()">
+                    <option value="none">No Tool</option>
+                    <option value="trendline">Trendline</option>
+                    <option value="fibonacci">Fibonacci</option>
+                    <option value="horizontal">Horizontal Line</option>
                 </select>
             </div>
             <div class="chart-container">
