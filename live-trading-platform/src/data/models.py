@@ -19,6 +19,8 @@ class OrderType(str, Enum):
     STOP_LIMIT = "stop_limit"
     TRAILING_STOP = "trailing_stop"
     TAKE_PROFIT = "take_profit"
+    BRACKET = "bracket"
+    OCO = "oco"
 
 
 class OrderStatus(str, Enum):
@@ -27,6 +29,16 @@ class OrderStatus(str, Enum):
     PARTIALLY_FILLED = "partially_filled"
     CANCELLED = "cancelled"
     REJECTED = "rejected"
+    EXPIRED = "expired"
+    REPLACED = "replaced"
+
+
+class TimeInForce(str, Enum):
+    GTC = "gtc"
+    GTD = "gtd"
+    IOC = "ioc"
+    FOK = "fok"
+    DAY = "day"
 
 
 class AssetClass(str, Enum):
@@ -118,6 +130,12 @@ class Order:
     trail_amount: Optional[Decimal] = None
     trail_percent: Optional[float] = None
     parent_order_id: Optional[str] = None
+    child_order_ids: list[str] = field(default_factory=list)
+    time_in_force: TimeInForce = TimeInForce.GTC
+    expires_at: Optional[datetime] = None
+    client_order_id: Optional[str] = None
+    replaced_by: Optional[str] = None
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -167,3 +185,98 @@ class StrategySignal:
     confidence: float
     strategy: str
     metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class Position:
+    symbol: str
+    quantity: Decimal
+    average_entry_price: Decimal
+    current_price: Optional[Decimal] = None
+    asset_class: AssetClass = AssetClass.CRYPTO
+    unrealized_pnl: Decimal = Decimal("0")
+    realized_pnl: Decimal = Decimal("0")
+    cost_basis: Decimal = Decimal("0")
+    market_value: Optional[Decimal] = None
+    weight: float = 0.0
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class MarginAccount:
+    asset_class: AssetClass
+    cash: Decimal
+    buying_power: Decimal
+    margin_used: Decimal
+    margin_requirement: float
+    maintenance_margin: float
+    leverage: float = 1.0
+    margin_call: bool = False
+
+
+@dataclass
+class OrderTicket:
+    symbol: str
+    side: Side
+    quantity: Decimal
+    order_type: OrderType
+    limit_price: Optional[Decimal] = None
+    stop_price: Optional[Decimal] = None
+    time_in_force: TimeInForce = TimeInForce.GTC
+    client_order_id: Optional[str] = None
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class ScanResult:
+    symbol: str
+    signal: str
+    confidence: float
+    indicator_values: dict
+    timestamp: datetime
+    asset_class: AssetClass = AssetClass.CRYPTO
+
+
+@dataclass
+class TimeSales:
+    symbol: str
+    price: Decimal
+    quantity: Decimal
+    side: Side
+    timestamp: datetime
+    exchange: str = ""
+    asset_class: AssetClass = AssetClass.CRYPTO
+
+
+@dataclass
+class DrawingTool:
+    id: str
+    tool_type: str
+    symbol: str
+    points: list[dict]
+    color: str = "#00d4ff"
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class Webhook:
+    id: str
+    url: str
+    events: list[str]
+    secret: str = ""
+    active: bool = True
+    created_at: datetime = field(default_factory=datetime.utcnow)
+
+
+@dataclass
+class AccountStatement:
+    account_id: str
+    asset_class: AssetClass
+    start_date: datetime
+    end_date: datetime
+    opening_cash: Decimal
+    closing_cash: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    total_fees: Decimal
+    trades: list[dict] = field(default_factory=list)

@@ -110,6 +110,28 @@ function updateDashboard(data) {
         document.getElementById('perfMaxWins').textContent = p.max_consecutive_wins || 0;
         document.getElementById('perfMaxLosses').textContent = p.max_consecutive_losses || 0;
     }
+    if (data.margin) {
+        const margin = data.margin.crypto || data.margin.us_equity || {};
+        document.getElementById('marginBuyingPower').textContent = '$' + (margin.buying_power || 0).toFixed(2);
+        document.getElementById('marginUsed').textContent = '$' + (margin.margin_used || 0).toFixed(2);
+        document.getElementById('marginLeverage').textContent = (margin.leverage || 1).toFixed(2) + 'x';
+        document.getElementById('marginCall').textContent = margin.margin_call ? 'YES' : 'No';
+        document.getElementById('marginCall').style.color = margin.margin_call ? '#ff1744' : '#e0e0e0';
+    }
+    if (data.journal) {
+        const tbody = document.querySelector('#journalTable tbody');
+        tbody.innerHTML = data.journal.slice(-20).reverse().map(j => '<tr><td>' + new Date(j.timestamp).toLocaleTimeString() + '</td><td>' + j.symbol + '</td><td>' + j.side + '</td><td>' + j.quantity + '</td><td>' + j.price + '</td><td>' + (j.pnl || 0).toFixed(2) + '</td><td>' + (j.strategy || '-') + '</td><td>' + (j.notes || '-') + '</td></tr>').join('');
+    }
+    if (data.time_sales) {
+        const tbody = document.querySelector('#timeSalesTable tbody');
+        tbody.innerHTML = data.time_sales.slice(-20).reverse().map(t => '<tr><td>' + new Date(t.timestamp).toLocaleTimeString() + '</td><td>' + t.symbol + '</td><td>' + t.price + '</td><td>' + t.quantity + '</td><td>' + t.side + '</td></tr>').join('');
+    }
+    if (data.statement) {
+        document.getElementById('stmtTotal').textContent = '$' + (data.statement.total_value || 0).toFixed(2);
+        document.getElementById('stmtCash').textContent = '$' + (data.statement.cash || 0).toFixed(2);
+        document.getElementById('stmtFees').textContent = '$' + (data.statement.total_fees || 0).toFixed(2);
+        document.getElementById('stmtTrades').textContent = data.statement.trade_count || 0;
+    }
 }
 
 async function startPlatform() {
@@ -145,6 +167,14 @@ function switchChart(symbol) {
     priceChart.update();
 }
 
+function changeChartType() {
+    const type = document.getElementById('chartType').value;
+    if (priceChart) {
+        priceChart.config.type = type === 'candlestick' || type === 'heikin-ashi' ? 'line' : type;
+        priceChart.update();
+    }
+}
+
 function initChart() {
     const ctx = document.getElementById('priceChart').getContext('2d');
     priceChart = new Chart(ctx, {
@@ -154,9 +184,40 @@ function initChart() {
     });
 }
 
+function initDepthChart() {
+    const ctx = document.getElementById('depthChart').getContext('2d');
+    window.depthChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'Bids', data: [], backgroundColor: 'rgba(0, 200, 83, 0.7)' }, { label: 'Asks', data: [], backgroundColor: 'rgba(255, 23, 68, 0.7)' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#9ca3af' } } }, scales: { x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } } } }
+    });
+}
+
+async function registerWebhook() {
+    const url = document.getElementById('webhookUrl').value;
+    const events = document.getElementById('webhookEvents').value.split(',').map(s => s.trim());
+    const res = await fetch('/api/webhooks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url, events})
+    });
+    const data = await res.json();
+    alert('Webhook registered: ' + data.id);
+    loadWebhooks();
+}
+
+async function loadWebhooks() {
+    const res = await fetch('/api/webhooks');
+    const data = await res.json();
+    const container = document.getElementById('webhookList');
+    container.innerHTML = data.map(w => '<div class=\"webhook-item\"><span>' + w.url + '</span><span>' + w.events.join(', ') + '</span><span>' + (w.active ? 'Active' : 'Inactive') + '</span></div>').join('');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initChart();
+    initDepthChart();
     connectWebSocket();
+    loadWebhooks();
     setInterval(async () => {
         const res = await fetch('/api/status');
         const data = await res.json();
@@ -164,3 +225,31 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('status').className = 'status-badge ' + (data.running ? 'running' : 'stopped');
     }, 5000);
 });
+
+async function exportCSV() {
+    window.open('/api/export/trades.csv', '_blank');
+}
+
+async function showTaxReport() {
+    const res = await fetch('/api/reports/tax');
+    const data = await res.json();
+    alert('Tax Report: Gains=$' + data.total_gains.toFixed(2) + ', Losses=$' + data.total_losses.toFixed(2) + ', Net=$' + data.net_pnl.toFixed(2));
+}
+
+async function runScanner() {
+    const indicator = document.getElementById('scanIndicator').value;
+    const condition = document.getElementById('scanCondition').value;
+    const threshold = parseFloat(document.getElementById('scanThreshold').value);
+    const res = await fetch('/api/scanner/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({criteria: [{indicator, condition, threshold}]})
+    });
+    const data = await res.json();
+    const container = document.getElementById('scanResults');
+    if (data.length === 0) {
+        container.innerHTML = '<div class=\"scan-result-card\"><div class=\"symbol\">No results</div></div>';
+    } else {
+        container.innerHTML = data.map(r => '<div class=\"scan-result-card\"><div class=\"symbol\">' + r.symbol + '</div><div class=\"signal\">' + r.signal + '</div><div class=\"confidence\">Confidence: ' + (r.confidence * 100).toFixed(1) + '%</div></div>').join('');
+    }
+}

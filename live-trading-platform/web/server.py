@@ -15,11 +15,15 @@ from src.data.manager import DataManager
 from src.data.models import AssetClass
 from src.engine.alerts import AlertCondition, AlertManager
 from src.engine.autonomous_trader import AutonomousTrader, RiskManager
+from src.engine.drawing_tools import DrawingTools
 from src.engine.execution_engine import ExecutionEngine
 from src.engine.news import NewsSentimentEngine
 from src.engine.options import OptionsEngine
 from src.engine.performance import PerformanceAttribution
+from src.engine.reporting import ReportingEngine
 from src.engine.risk import RiskAnalyzer
+from src.engine.scanner import ScanCriteria, Scanner
+from src.engine.webhooks import WebhookManager
 from src.engine.watchlist import WatchlistManager
 from src.portfolio.portfolio import Portfolio
 from src.self_improvement.engine import SelfImprovementEngine
@@ -35,6 +39,7 @@ trader = None
 data_manager = None
 alert_manager = None
 watchlist_manager = None
+webhook_manager = WebhookManager()
 websocket_connections = set()
 
 
@@ -427,6 +432,232 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
             await writer.drain()
 
+        elif path.startswith("/api/orders/") and method == "POST" and path.endswith("/cancel"):
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                order_id = path.split("/")[3]
+                success = trader.engine.cancel_order(order_id)
+                result = {"cancelled": success}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path.startswith("/api/orders/") and method == "POST" and path.endswith("/modify"):
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                order_id = path.split("/")[3]
+                data = json.loads(body.decode()) if body else {}
+                order = trader.engine.modify_order(
+                    order_id,
+                    limit_price=Decimal(str(data["limit_price"])) if data.get("limit_price") else None,
+                    stop_price=Decimal(str(data["stop_price"])) if data.get("stop_price") else None,
+                    quantity=Decimal(str(data["quantity"])) if data.get("quantity") else None,
+                )
+                result = {"modified": order is not None}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/orders/bracket" and method == "POST":
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                data = json.loads(body.decode()) if body else {}
+                order = trader.engine.submit_bracket_order(
+                    symbol=data.get("symbol", ""),
+                    side=Side(data.get("side", "buy")),
+                    quantity=Decimal(str(data.get("quantity", 0.01))),
+                    entry_price=Decimal(str(data["entry_price"])) if data.get("entry_price") else None,
+                    take_profit=Decimal(str(data["take_profit"])) if data.get("take_profit") else None,
+                    stop_loss=Decimal(str(data["stop_loss"])) if data.get("stop_loss") else None,
+                    asset_class=AssetClass(data.get("asset_class", "crypto")),
+                )
+                result = {"order_id": order.id if order else None}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/margin" and method == "GET":
+            result = {}
+            if trader:
+                result = trader.portfolio.get_margin_accounts()
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/reports/pnl" and method == "GET":
+            result = {}
+            if trader:
+                reporting = ReportingEngine(trader.portfolio)
+                result = reporting.get_daily_pnl(days=30)
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/reports/trade-journal" and method == "GET":
+            result = []
+            if trader:
+                reporting = ReportingEngine(trader.portfolio)
+                result = reporting.get_trade_journal()
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/reports/tax" and method == "GET":
+            result = {}
+            if trader:
+                reporting = ReportingEngine(trader.portfolio)
+                result = reporting.get_tax_report()
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/scanner/scan" and method == "POST":
+            result = []
+            if trader and data_manager:
+                data = json.loads(body.decode()) if body else {}
+                scanner = Scanner()
+                for symbol in list(trader._last_price.keys()):
+                    adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                    if adapter:
+                        import asyncio as _asyncio
+                        loop = _asyncio.get_event_loop()
+                        candles = loop.run_until_complete(adapter.get_historical_candles(symbol, limit=50))
+                        if candles:
+                            prices = [c.close for c in candles]
+                            highs = [c.high for c in candles]
+                            lows = [c.low for c in candles]
+                            volumes = [c.volume for c in candles]
+                            criteria = [
+                                ScanCriteria(indicator=c.get("indicator", "RSI"), condition=c.get("condition", "below"), threshold=Decimal(str(c.get("threshold", 30))))
+                                for c in data.get("criteria", [])
+                            ]
+                            scan = scanner.scan_symbol(symbol, prices, highs, lows, volumes, criteria)
+                            if scan:
+                                result.append({
+                                    "symbol": scan.symbol,
+                                    "signal": scan.signal,
+                                    "confidence": scan.confidence,
+                                    "values": scan.indicator_values,
+                                    "timestamp": scan.timestamp.isoformat(),
+                                })
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/drawings" and method == "POST":
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                data = json.loads(body.decode()) if body else {}
+                tool_type = data.get("tool_type", "trendline")
+                symbol = data.get("symbol", "")
+                points = data.get("points", [])
+                color = data.get("color", "#00d4ff")
+                if tool_type == "trendline":
+                    drawing = DrawingTools.trendline(points, color)
+                elif tool_type == "fibonacci":
+                    drawing = DrawingTools.fibonacci_retracement(points[0], points[1], color) if len(points) >= 2 else None
+                elif tool_type == "horizontal":
+                    drawing = DrawingTools.horizontal_line(Decimal(str(points[0].get("price", 0))), symbol, color)
+                else:
+                    drawing = None
+                result = {"id": drawing.id if drawing else None, "type": tool_type}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/timesales" and method == "GET":
+            result = []
+            if trader:
+                for ac, trade_list in trader.portfolio.get_trades().items():
+                    for t in trade_list[-50:]:
+                        result.append({
+                            "symbol": t["symbol"],
+                            "price": t["price"],
+                            "quantity": t["quantity"],
+                            "side": t["side"],
+                            "timestamp": t["timestamp"],
+                            "fee": t["fee"],
+                        })
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/account/statement" and method == "GET":
+            result = {}
+            if trader:
+                reporting = ReportingEngine(trader.portfolio)
+                all_trades = []
+                for ac, trade_list in trader.portfolio.get_trades().items():
+                    all_trades.extend(trade_list)
+                total_fees = sum(t["fee"] for t in all_trades)
+                total_value = float(trader.portfolio.get_total_value())
+                cash = sum(float(v) for v in trader.portfolio.get_cash().values())
+                result = {
+                    "total_value": total_value,
+                    "cash": cash,
+                    "total_fees": total_fees,
+                    "trade_count": len(all_trades),
+                    "generated_at": datetime.utcnow().isoformat(),
+                }
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/webhooks" and method == "POST":
+            data = json.loads(body.decode()) if body else {}
+            url = data.get("url", "")
+            events = data.get("events", [])
+            if not url or not events:
+                result = {"error": "url and events required"}
+            else:
+                webhook = webhook_manager.register_webhook(url, events)
+                result = {"id": webhook.id, "url": webhook.url, "events": webhook.events, "secret": webhook.secret}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/webhooks" and method == "GET":
+            result = [{"id": w.id, "url": w.url, "events": w.events, "active": w.active} for w in webhook_manager.get_webhooks()]
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/external/api" and method == "GET":
+            api_key = request_line.split("?key=")[1].split(" ")[0] if "?key=" in request_line else ""
+            if not api_key:
+                result = {"error": "API key required"}
+            else:
+                result = {
+                    "status": "ok",
+                    "endpoints": [
+                        "/api/status",
+                        "/api/portfolio",
+                        "/api/prices",
+                        "/api/trades",
+                        "/api/orders",
+                        "/api/positions",
+                        "/api/risk",
+                        "/api/performance",
+                        "/api/margin",
+                        "/api/reports/pnl",
+                        "/api/reports/trade-journal",
+                        "/api/reports/tax",
+                        "/api/scanner/scan",
+                        "/api/options/greeks",
+                        "/api/ai/research",
+                        "/api/ai/backtest",
+                        "/api/ai/optimize",
+                        "/api/ai/monte-carlo",
+                    ],
+                }
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
         else:
             writer.write(b"HTTP/1.1 404 Not Found\r\n\r\n")
             await writer.drain()
@@ -583,6 +814,41 @@ async def _dashboard_broadcast_loop() -> None:
                     }
                 except Exception as exc:
                     logger.error("Performance error: %s", exc)
+                margin_data = {}
+                try:
+                    margin_data = trader.portfolio.get_margin_accounts()
+                except Exception as exc:
+                    logger.error("Margin error: %s", exc)
+                reporting = ReportingEngine(trader.portfolio)
+                journal_data = reporting.get_trade_journal()[-20:]
+                time_sales = []
+                for ac, trade_list in trader.portfolio.get_trades().items():
+                    for t in trade_list[-50:]:
+                        time_sales.append({
+                            "symbol": t["symbol"],
+                            "price": t["price"],
+                            "quantity": t["quantity"],
+                            "side": t["side"],
+                            "timestamp": t["timestamp"],
+                            "fee": t["fee"],
+                        })
+                statement = {}
+                try:
+                    all_trades = []
+                    for ac, trade_list in trader.portfolio.get_trades().items():
+                        all_trades.extend(trade_list)
+                    total_fees = sum(t["fee"] for t in all_trades)
+                    total_value = float(trader.portfolio.get_total_value())
+                    cash = sum(float(v) for v in trader.portfolio.get_cash().values())
+                    statement = {
+                        "total_value": total_value,
+                        "cash": cash,
+                        "total_fees": total_fees,
+                        "trade_count": len(all_trades),
+                        "generated_at": datetime.utcnow().isoformat(),
+                    }
+                except Exception as exc:
+                    logger.error("Statement error: %s", exc)
                 await broadcast_ws({
                     "type": "dashboard",
                     "data": {
@@ -596,6 +862,10 @@ async def _dashboard_broadcast_loop() -> None:
                         "options": options_data,
                         "monte_carlo": monte_carlo_data,
                         "performance": performance_data,
+                        "margin": margin_data,
+                        "journal": journal_data,
+                        "time_sales": time_sales,
+                        "statement": statement,
                     },
                 })
             await asyncio.sleep(2)

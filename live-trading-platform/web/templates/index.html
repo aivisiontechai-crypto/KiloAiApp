@@ -87,9 +87,53 @@
                 <button class="chart-tab active" onclick="switchChart('BTC-USD')">BTC-USD</button>
                 <button class="chart-tab" onclick="switchChart('ETH-USD')">ETH-USD</button>
             </div>
+            <div class="chart-controls">
+                <select id="chartType" onchange="changeChartType()">
+                    <option value="line">Line</option>
+                    <option value="candlestick">Candlestick</option>
+                    <option value="heikin-ashi">Heikin-Ashi</option>
+                </select>
+            </div>
             <div class="chart-container">
                 <canvas id="priceChart"></canvas>
             </div>
+        </section>
+
+        <section class="panel">
+            <h2>Level 2 Depth</h2>
+            <div class="depth-chart-container">
+                <canvas id="depthChart"></canvas>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Time & Sales</h2>
+            <div class="table-container">
+                <table id="timeSalesTable">
+                    <thead><tr><th>Time</th><th>Symbol</th><th>Price</th><th>Qty</th><th>Side</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Account Statement</h2>
+            <div class="metrics-grid" id="accountStatement">
+                <div class="metric"><span class="label">Total Value</span><span id="stmtTotal" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Cash</span><span id="stmtCash" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Total Fees</span><span id="stmtFees" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Trade Count</span><span id="stmtTrades" class="value">0</span></div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Webhooks & Integrations</h2>
+            <div class="webhook-controls">
+                <input type="text" id="webhookUrl" placeholder="https://example.com/webhook">
+                <input type="text" id="webhookEvents" placeholder="trade,price,signal">
+                <button onclick="registerWebhook()">Register</button>
+            </div>
+            <div id="webhookList" class="webhook-list"></div>
         </section>
 
         <section class="panel">
@@ -187,6 +231,53 @@
                 <div class="metric"><span class="label">Max Consecutive Wins</span><span id="perfMaxWins" class="value">0</span></div>
                 <div class="metric"><span class="label">Max Consecutive Losses</span><span id="perfMaxLosses" class="value">0</span></div>
             </div>
+        </section>
+
+        <section class="panel">
+            <h2>Margin & Account</h2>
+            <div class="metrics-grid" id="margin">
+                <div class="metric"><span class="label">Buying Power</span><span id="marginBuyingPower" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Margin Used</span><span id="marginUsed" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Leverage</span><span id="marginLeverage" class="value">1.00x</span></div>
+                <div class="metric"><span class="label">Margin Call</span><span id="marginCall" class="value">No</span></div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Trade Journal & Reports</h2>
+            <div class="table-container">
+                <table id="journalTable">
+                    <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>PnL</th><th>Strategy</th><th>Notes</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div style="margin-top:10px">
+                <button onclick="exportCSV()">Export CSV</button>
+                <button onclick="showTaxReport()">Tax Report</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Scanner</h2>
+            <div class="scanner-controls">
+                <select id="scanIndicator">
+                    <option value="RSI">RSI</option>
+                    <option value="MACD">MACD</option>
+                    <option value="BollingerBands">Bollinger Bands</option>
+                    <option value="Stochastic">Stochastic</option>
+                    <option value="VWAP">VWAP</option>
+                    <option value="SuperTrend">SuperTrend</option>
+                </select>
+                <select id="scanCondition">
+                    <option value="below">Below</option>
+                    <option value="above">Above</option>
+                    <option value="crosses_above">Crosses Above</option>
+                    <option value="crosses_below">Crosses Below</option>
+                </select>
+                <input type="number" id="scanThreshold" placeholder="Threshold" value="30">
+                <button onclick="runScanner()">Scan</button>
+            </div>
+            <div id="scanResults" class="scan-results"></div>
         </section>
     </div>
 
