@@ -1,0 +1,274 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #0a0e17;
+    color: #e0e0e0;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #1a2332;
+}
+
+h1 {
+    color: #00d4ff;
+    font-size: 1.8rem;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+button {
+    background: #00d4ff;
+    color: #0a0e17;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+button:hover:not(:disabled) {
+    background: #00a8cc;
+}
+
+button:disabled {
+    background: #333;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.status-badge.running {
+    background: #00c853;
+    color: #0a0e17;
+}
+
+.status-badge.stopped {
+    background: #ff1744;
+    color: white;
+}
+
+.panel {
+    background: #111827;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #1f2937;
+}
+
+.panel h2 {
+    color: #00d4ff;
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #1f2937;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.metric {
+    background: #1f2937;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.metric .label {
+    display: block;
+    color: #9ca3af;
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+}
+
+.metric .value {
+    display: block;
+    color: #00d4ff;
+    font-size: 1.4rem;
+    font-weight: bold;
+}
+
+.price-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.price-card {
+    background: #1f2937;
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 3px solid #00d4ff;
+}
+
+.price-card .symbol {
+    color: #9ca3af;
+    font-size: 0.85rem;
+}
+
+.price-card .price {
+    color: #00d4ff;
+    font-size: 1.3rem;
+    font-weight: bold;
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #1f2937;
+}
+
+th {
+    color: #00d4ff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+}
+
+td {
+    color: #e0e0e0;
+    font-size: 0.9rem;
+}
+
+.chart-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.chart-tab {
+    background: #1f2937;
+    color: #9ca3af;
+    border: 1px solid #374151;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.chart-tab.active {
+    background: #00d4ff;
+    color: #0a0e17;
+    border-color: #00d4ff;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+.strategy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 15px;
+}
+
+.strategy-card {
+    background: #1f2937;
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 3px solid #00d4ff;
+}
+
+.strategy-card .name {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+
+.strategy-card .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.strategy-card .metric-item {
+    display: flex;
+    justify-content: space-between;
+}
+
+.strategy-card .metric-label {
+    color: #9ca3af;
+    font-size: 0.8rem;
+}
+
+.strategy-card .metric-value {
+    color: #00d4ff;
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.orderbook-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.ob-side h3 {
+    color: #00d4ff;
+    font-size: 1rem;
+    margin-bottom: 10px;
+}
+
+.news-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.news-item {
+    background: #1f2937;
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 3px solid #00d4ff;
+}
+
+.news-title {
+    color: #e0e0e0;
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+}
+
+.news-meta {
+    color: #9ca3af;
+    font-size: 0.8rem;
+}

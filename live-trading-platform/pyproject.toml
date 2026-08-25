@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "live-trading-platform"
+version = "0.1.0"
+description = "Self-improving live paper trading platform"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.21.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[tool.pytest.testpaths]
+["tests"]

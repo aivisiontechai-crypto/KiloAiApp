@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Trading Platform</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Live Trading Platform</h1>
+            <div class="controls">
+                <button id="startBtn" onclick="startPlatform()">Start Platform</button>
+                <button id="stopBtn" onclick="stopPlatform()" disabled>Stop Platform</button>
+                <span id="status" class="status-badge">stopped</span>
+            </div>
+        </header>
+
+        <section class="panel portfolio">
+            <h2>Portfolio Overview</h2>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <span class="label">Total Value</span>
+                    <span id="totalValue" class="value">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="label">PnL</span>
+                    <span id="totalPnl" class="value">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Return</span>
+                    <span id="totalReturn" class="value">0.00%</span>
+                </div>
+                <div class="metric">
+                    <span class="label">Trades</span>
+                    <span id="tradeCount" class="value">0</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Live Prices</h2>
+            <div id="priceCards" class="price-grid"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Current Positions</h2>
+            <div class="table-container">
+                <table id="positionsTable">
+                    <thead>
+                        <tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Current</th><th>Market Value</th><th>Unrealized PnL</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Active Orders</h2>
+            <div class="table-container">
+                <table id="ordersTable">
+                    <thead>
+                        <tr><th>ID</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Type</th><th>Status</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Trade History</h2>
+            <div class="table-container">
+                <table id="tradesTable">
+                    <thead>
+                        <tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Fee</th><th>PnL</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Price Chart</h2>
+            <div class="chart-tabs">
+                <button class="chart-tab active" onclick="switchChart('BTC-USD')">BTC-USD</button>
+                <button class="chart-tab" onclick="switchChart('ETH-USD')">ETH-USD</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Strategy Performance</h2>
+            <div id="strategyHealth" class="strategy-grid"></div>
+        </section>
+
+        <section class="panel">
+            <h2>Self-Improvement Log</h2>
+            <div class="table-container">
+                <table id="improvementsTable">
+                    <thead>
+                        <tr><th>Time</th><th>Strategy</th><th>Action</th><th>Reason</th><th>Metric</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Order Book Depth</h2>
+            <div class="orderbook-container">
+                <div class="ob-side">
+                    <h3>Bids</h3>
+                    <table id="bidsTable">
+                        <thead><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="ob-side">
+                    <h3>Asks</h3>
+                    <table id="asksTable">
+                        <thead><tr><th>Price</th><th>Qty</th><th>Orders</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Portfolio Risk Metrics</h2>
+            <div class="metrics-grid" id="riskMetrics">
+                <div class="metric"><span class="label">VaR (95%)</span><span id="var95" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">VaR (99%)</span><span id="var99" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Stress Test Loss</span><span id="stressLoss" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Beta</span><span id="beta" class="value">1.00</span></div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Market News & Sentiment</h2>
+            <div id="newsContainer" class="news-container"></div>
+        </section>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
