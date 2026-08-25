@@ -21,6 +21,12 @@ class OrderType(str, Enum):
     TAKE_PROFIT = "take_profit"
     BRACKET = "bracket"
     OCO = "oco"
+    ICEBERG = "iceberg"
+    TWAP = "twap"
+    VWAP = "vwap"
+    PEGGED = "pegged"
+    MARKET_IF_TOUCHED = "market_if_touched"
+    LIMIT_IF_TOUCHED = "limit_if_touched"
 
 
 class OrderStatus(str, Enum):

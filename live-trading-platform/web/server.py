@@ -27,6 +27,10 @@ from src.engine.risk import RiskAnalyzer
 from src.engine.scanner import ScanCriteria, Scanner
 from src.engine.webhooks import WebhookManager
 from src.engine.watchlist import WatchlistManager
+from src.engine.patterns import PatternRecognition
+from src.engine.volume_profile import VolumeProfile
+from src.engine.risk_tools import RiskToleranceAssessment, PositionSizingCalculator
+from src.engine.portfolio_optimizer import PortfolioOptimizer
 from src.portfolio.portfolio import Portfolio
 from src.self_improvement.engine import SelfImprovementEngine
 from src.self_improvement.health_monitor import StrategyHealthMonitor
@@ -663,6 +667,24 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
             await writer.drain()
 
+        elif path == "/api/orders/oco" and method == "POST":
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                data = json.loads(body.decode()) if body else {}
+                orders = trader.engine.submit_oco(
+                    symbol=data.get("symbol", ""),
+                    side=Side(data.get("side", "buy")),
+                    quantity=Decimal(str(data.get("quantity", 0.01))),
+                    limit_order=data.get("limit_order"),
+                    stop_order=data.get("stop_order"),
+                    asset_class=AssetClass(data.get("asset_class", "crypto")),
+                )
+                result = {"order_id": orders.id if orders else None}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
         elif path == "/api/margin" and method == "GET":
             result = {}
             if trader:
@@ -846,6 +868,107 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                         "/api/webhooks",
                         "/api/external/api",
                     ],
+                }
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/patterns" and method == "GET":
+            result = []
+            if trader and data_manager:
+                symbol = request_line.split("?")[1].split("=")[1] if "?" in request_line else "BTC-USD"
+                adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                if adapter:
+                    import asyncio as _asyncio
+                    loop = _asyncio.get_event_loop()
+                    candles = loop.run_until_complete(adapter.get_historical_candles(symbol, limit=50))
+                    if candles:
+                        prices = [float(c.close) for c in candles]
+                        volumes = [float(c.volume) for c in candles]
+                        result = PatternRecognition.scan_all(prices, volumes)
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/volume-profile" and method == "GET":
+            result = {}
+            if trader and data_manager:
+                symbol = request_line.split("?")[1].split("=")[1] if "?" in request_line else "BTC-USD"
+                adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                if adapter:
+                    import asyncio as _asyncio
+                    loop = _asyncio.get_event_loop()
+                    candles = loop.run_until_complete(adapter.get_historical_candles(symbol, limit=100))
+                    if candles:
+                        vp = VolumeProfile(symbol)
+                        for c in candles:
+                            vp.add_candle(c.high, c.low, c.volume)
+                        result = {
+                            "profile": vp.get_profile(),
+                            "poc": vp.get_poc(),
+                            "value_area": vp.get_value_area(),
+                        }
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/risk/profile" and method == "POST":
+            result = {}
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                data = json.loads(body.decode()) if body else {}
+                profile = RiskToleranceAssessment.assess(data)
+                result = {
+                    "risk_tolerance": profile.risk_tolerance,
+                    "max_position_size": float(profile.max_position_size),
+                    "max_portfolio_risk": float(profile.max_portfolio_risk),
+                    "stop_loss_percent": float(profile.stop_loss_percent),
+                    "take_profit_percent": float(profile.take_profit_percent),
+                    "max_open_positions": profile.max_open_positions,
+                    "description": profile.description,
+                }
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/risk/position-size" and method == "POST":
+            result = {}
+            if not trader:
+                result = {"error": "Trader not running"}
+            else:
+                data = json.loads(body.decode()) if body else {}
+                size = PositionSizingCalculator.calculate_position_size(
+                    account_balance=Decimal(str(data.get("account_balance", 50000))),
+                    entry_price=Decimal(str(data.get("entry_price", 0))),
+                    stop_loss_price=Decimal(str(data.get("stop_loss_price", 0))),
+                    risk_per_trade=Decimal(str(data.get("risk_per_trade", 0.02))),
+                    max_position_size=Decimal(str(data.get("max_position_size", 0.1))),
+                )
+                result = {"position_size": float(size)}
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/portfolio/optimize" and method == "POST":
+            result = {}
+            if not trader or not data_manager:
+                result = {"error": "Trader not running"}
+            else:
+                data = json.loads(body.decode()) if body else {}
+                returns = data.get("returns", {})
+                covariances = data.get("covariances", {})
+                method = data.get("method", "sharpe")
+                optimizer = PortfolioOptimizer()
+                parsed_returns = {k: [float(v) for v in vals] for k, vals in returns.items()}
+                parsed_cov = {(k1, k2): float(v) for (k1, k2), v in covariances.items()}
+                opt_result = optimizer.optimize(parsed_returns, parsed_cov, method)
+                result = {
+                    "weights": opt_result.weights,
+                    "expected_return": opt_result.expected_return,
+                    "volatility": opt_result.volatility,
+                    "sharpe_ratio": opt_result.sharpe_ratio,
+                    "method": opt_result.method,
                 }
             body_out = json_dumps(result).encode()
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)

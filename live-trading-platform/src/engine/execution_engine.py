@@ -56,6 +56,15 @@ class ExecutionEngine:
         if order_type == OrderType.TRAILING_STOP and trail_amount is None and trail_percent is None:
             logger.error("Rejected TRAILING_STOP order: trail_amount or trail_percent required")
             return None
+        if order_type == OrderType.ICEBERG and (limit_price is None or not metadata):
+            logger.error("Rejected ICEBERG order: limit_price and metadata with display_size required")
+            return None
+        if order_type == OrderType.MARKET_IF_TOUCHED and stop_price is None:
+            logger.error("Rejected MARKET_IF_TOUCHED order: stop_price required")
+            return None
+        if order_type == OrderType.LIMIT_IF_TOUCHED and stop_price is None:
+            logger.error("Rejected LIMIT_IF_TOUCHED order: stop_price required")
+            return None
 
         now = datetime.utcnow()
         coid = client_order_id or str(uuid.uuid4())

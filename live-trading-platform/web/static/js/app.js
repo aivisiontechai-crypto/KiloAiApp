@@ -282,6 +282,16 @@ function updateDashboard(data) {
     if (data.depth) {
         updateDepthChart(data.depth);
     }
+    if (data.patterns) {
+        const container = document.getElementById('patternResults');
+        if (container) {
+            if (data.patterns.length === 0) {
+                container.innerHTML = '<div class="scan-result-card"><div class="symbol">No patterns detected</div></div>';
+            } else {
+                container.innerHTML = data.patterns.map(p => '<div class="scan-result-card"><div class="symbol">' + p.pattern_type.replace(/_/g, ' ') + '</div><div class="signal">Confidence: ' + (p.confidence * 100).toFixed(1) + '%</div></div>').join('');
+            }
+        }
+    }
 }
 
 function updateDepthChart(depthData) {
@@ -504,6 +514,19 @@ async function loadOptionsChain() {
     tbody.innerHTML = data.map(o => '<tr><td>' + o.symbol + '</td><td>' + o.type + '</td><td>' + o.strike + '</td><td>' + o.premium.toFixed(2) + '</td><td>' + o.delta.toFixed(4) + '</td><td>' + o.gamma.toFixed(4) + '</td><td>' + o.theta.toFixed(4) + '</td><td>' + o.vega.toFixed(4) + '</td></tr>').join('');
 }
 
+async function loadPatterns() {
+    const res = await fetch('/api/patterns?symbol=' + currentChartSymbol);
+    const data = await res.json();
+    const container = document.getElementById('patternResults');
+    if (container) {
+        if (data.length === 0) {
+            container.innerHTML = '<div class="scan-result-card"><div class="symbol">Scanning...</div></div>';
+        } else {
+            container.innerHTML = data.map(p => '<div class="scan-result-card"><div class="symbol">' + p.pattern_type.replace(/_/g, ' ') + '</div><div class="signal">Confidence: ' + (p.confidence * 100).toFixed(1) + '%</div></div>').join('');
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initChart();
     initDepthChart();
@@ -511,8 +534,10 @@ document.addEventListener('DOMContentLoaded', () => {
     loadWebhooks();
     loadAccounts();
     loadOptionsChain();
+    loadPatterns();
     setInterval(loadAccounts, 30000);
     setInterval(loadOptionsChain, 30000);
+    setInterval(loadPatterns, 60000);
     setInterval(async () => {
         const res = await fetch('/api/status');
         const data = await res.json();
@@ -548,3 +573,79 @@ async function runScanner() {
         container.innerHTML = data.map(r => '<div class="scan-result-card"><div class="symbol">' + r.symbol + '</div><div class="signal">' + r.signal + '</div><div class="confidence">Confidence: ' + (r.confidence * 100).toFixed(1) + '%</div></div>').join('');
     }
 }
+
+async function submitQuickTrade() {
+    const symbol = document.getElementById('tradeSymbol').value;
+    const side = document.getElementById('tradeSide').value;
+    const qty = parseFloat(document.getElementById('tradeQty').value);
+    const type = document.getElementById('tradeType').value;
+    const price = document.getElementById('tradePrice').value;
+    const body = { symbol, side, quantity: qty, order_type: type };
+    if (price) body.limit_price = parseFloat(price);
+    const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    alert('Order submitted: ' + (data.order_id || 'error'));
+}
+
+async function submitBracketOrder() {
+    const symbol = document.getElementById('tradeSymbol').value;
+    const side = document.getElementById('tradeSide').value;
+    const qty = parseFloat(document.getElementById('tradeQty').value);
+    const entry = document.getElementById('tradePrice').value;
+    const tp = prompt('Take Profit price:');
+    const sl = prompt('Stop Loss price:');
+    const res = await fetch('/api/orders/bracket', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ symbol, side, quantity: qty, entry_price: entry ? parseFloat(entry) : undefined, take_profit: tp ? parseFloat(tp) : undefined, stop_loss: sl ? parseFloat(sl) : undefined })
+    });
+    const data = await res.json();
+    alert('Bracket order submitted: ' + (data.order_id || 'error'));
+}
+
+async function submitOCOOrder() {
+    const symbol = document.getElementById('tradeSymbol').value;
+    const side = document.getElementById('tradeSide').value;
+    const qty = parseFloat(document.getElementById('tradeQty').value);
+    const res = await fetch('/api/orders/oco', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ symbol, side, quantity: qty, limit_order: { limit_price: parseFloat(document.getElementById('tradePrice').value) || 0 } })
+    });
+    const data = await res.json();
+    alert('OCO order submitted: ' + (data.order_id || 'error'));
+}
+
+async function showDailyPnl() {
+    const res = await fetch('/api/reports/pnl');
+    const data = await res.json();
+    alert('Daily PnL: Net=$' + (data.net_pnl || 0).toFixed(2) + ', Trades=' + (data.trade_count || 0));
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    switch (e.key.toLowerCase()) {
+        case 'b':
+            document.getElementById('tradeSide').value = 'buy';
+            break;
+        case 's':
+            document.getElementById('tradeSide').value = 'sell';
+            break;
+        case 'enter':
+            submitQuickTrade();
+            break;
+        case 'c':
+            changeChartType();
+            break;
+        case 'd':
+            const toolSelect = document.getElementById('drawingTool');
+            const next = (toolSelect.selectedIndex + 1) % toolSelect.options.length;
+            toolSelect.selectedIndex = next;
+            changeDrawingTool();
+            break;
+    }
+});
