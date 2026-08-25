@@ -39,6 +39,41 @@ class TechnicalIndicators:
         return ema
 
     @staticmethod
+    def wma(prices: list[Decimal], period: int) -> Optional[Decimal]:
+        if len(prices) < period:
+            return None
+        weights = list(range(1, period + 1))
+        weighted_sum = sum(p * w for p, w in zip(prices[-period:], weights))
+        return weighted_sum / sum(weights)
+
+    @staticmethod
+    def dema(prices: list[Decimal], period: int) -> Optional[Decimal]:
+        if len(prices) < period:
+            return None
+        ema1 = TechnicalIndicators.ema(prices, period)
+        if ema1 is None:
+            return None
+        ema2 = TechnicalIndicators.ema(prices + [ema1], period)
+        if ema2 is None:
+            return None
+        return Decimal("2") * ema1 - ema2
+
+    @staticmethod
+    def tema(prices: list[Decimal], period: int) -> Optional[Decimal]:
+        if len(prices) < period:
+            return None
+        ema1 = TechnicalIndicators.ema(prices, period)
+        if ema1 is None:
+            return None
+        ema2 = TechnicalIndicators.ema(prices + [ema1], period)
+        if ema2 is None:
+            return None
+        ema3 = TechnicalIndicators.ema(prices + [ema2], period)
+        if ema3 is None:
+            return None
+        return Decimal("3") * ema1 - Decimal("3") * ema2 + ema3
+
+    @staticmethod
     def rsi(prices: list[Decimal], period: int = 14) -> Optional[IndicatorResult]:
         if len(prices) < period + 1:
             return None
@@ -165,7 +200,7 @@ class TechnicalIndicators:
         else:
             dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * Decimal("100")
         signal = "strong_trend" if dx > Decimal("25") else "weak_trend"
-        return IndicatorResult(name="ADX", value=dx, signal=signal, metadata={"period": period})
+        return IndicatorResult(name="ADX", value=dx, signal=signal, metadata={"period": period, "plus_di": float(plus_di), "minus_di": float(minus_di)})
 
     @staticmethod
     def ichimoku(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], tenkan: int = 9, kijun: int = 26, senkou: int = 52) -> Optional[IndicatorResult]:
@@ -190,3 +225,131 @@ class TechnicalIndicators:
             "0.786": high - diff * Decimal("0.786"),
             "1.0": low,
         }
+
+    @staticmethod
+    def cci(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], period: int = 20) -> Optional[IndicatorResult]:
+        if len(closes) < period:
+            return None
+        typical_prices = [(highs[i] + lows[i] + closes[i]) / Decimal("3") for i in range(len(closes))]
+        sma = sum(typical_prices[-period:]) / Decimal(period)
+        mean_deviation = sum(abs(tp - sma) for tp in typical_prices[-period:]) / Decimal(period)
+        if mean_deviation == 0:
+            return IndicatorResult(name="CCI", value=Decimal("0"), metadata={"period": period})
+        cci = (typical_prices[-1] - sma) / (Decimal("0.015") * mean_deviation)
+        signal = "oversold" if cci < Decimal("-100") else "overbought" if cci > Decimal("100") else "neutral"
+        return IndicatorResult(name="CCI", value=cci, signal=signal, metadata={"period": period})
+
+    @staticmethod
+    def mfi(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], volumes: list[Decimal], period: int = 14) -> Optional[IndicatorResult]:
+        if len(closes) < period + 1 or len(closes) != len(volumes):
+            return None
+        typical_prices = [(highs[i] + lows[i] + closes[i]) / Decimal("3") for i in range(len(closes))]
+        money_flows = []
+        for i in range(1, len(closes)):
+            tp = typical_prices[i]
+            tp_prev = typical_prices[i-1]
+            if tp > tp_prev:
+                money_flows.append(tp * volumes[i])
+            else:
+                money_flows.append(-tp * volumes[i])
+        positive_flow = sum(mf for mf in money_flows[-period:] if mf > 0)
+        negative_flow = abs(sum(mf for mf in money_flows[-period:] if mf < 0))
+        if negative_flow == 0:
+            mfi = Decimal("100")
+        else:
+            money_ratio = positive_flow / negative_flow
+            mfi = Decimal("100") - (Decimal("100") / (Decimal("1") + money_ratio))
+        signal = "oversold" if mfi < Decimal("20") else "overbought" if mfi > Decimal("80") else "neutral"
+        return IndicatorResult(name="MFI", value=mfi, signal=signal, metadata={"period": period})
+
+    @staticmethod
+    def vwap(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], volumes: list[Decimal]) -> Optional[IndicatorResult]:
+        if len(closes) < 1 or len(closes) != len(volumes):
+            return None
+        typical_prices = [(highs[i] + lows[i] + closes[i]) / Decimal("3") for i in range(len(closes))]
+        vwap_num = sum(tp * vol for tp, vol in zip(typical_prices, volumes))
+        vwap_den = sum(volumes)
+        if vwap_den == 0:
+            return None
+        vwap = vwap_num / vwap_den
+        signal = "bullish" if closes[-1] > vwap else "bearish"
+        return IndicatorResult(name="VWAP", value=vwap, signal=signal, metadata={"period": len(closes)})
+
+    @staticmethod
+    def supertrend(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], period: int = 10, multiplier: float = 3.0) -> Optional[IndicatorResult]:
+        if len(closes) < period + 1:
+            return None
+        tr_list = []
+        for i in range(1, len(closes)):
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+            tr_list.append(tr)
+        atr = sum(tr_list[-period:]) / Decimal(period)
+        hl_avg = [(highs[i] + lows[i]) / Decimal("2") for i in range(len(closes))]
+        upper_band = hl_avg[-1] + Decimal(str(multiplier)) * atr
+        lower_band = hl_avg[-1] - Decimal(str(multiplier)) * atr
+        signal = "bullish" if closes[-1] > upper_band else "bearish" if closes[-1] < lower_band else "neutral"
+        return IndicatorResult(name="SuperTrend", value=upper_band, values=[upper_band, lower_band], signal=signal, metadata={"period": period, "multiplier": multiplier})
+
+    @staticmethod
+    def donchian_channel(highs: list[Decimal], lows: list[Decimal], period: int = 20) -> Optional[IndicatorResult]:
+        if len(highs) < period or len(lows) < period:
+            return None
+        upper = max(highs[-period:])
+        lower = min(lows[-period:])
+        middle = (upper + lower) / Decimal("2")
+        signal = "bullish" if highs[-1] >= upper else "bearish" if lows[-1] <= lower else "neutral"
+        return IndicatorResult(name="DonchianChannel", value=middle, values=[upper, middle, lower], signal=signal, metadata={"period": period})
+
+    @staticmethod
+    def parabolic_sar(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], af_start: float = 0.02, af_max: float = 0.2) -> Optional[IndicatorResult]:
+        if len(closes) < 2:
+            return None
+        sar = lows[0]
+        af = af_start
+        uptrend = True
+        ep = highs[0]
+        for i in range(1, len(closes)):
+            if uptrend:
+                sar = sar + af * (ep - sar)
+                if lows[i] < sar:
+                    uptrend = False
+                    sar = ep
+                    ep = lows[i]
+                    af = af_start
+                else:
+                    if highs[i] > ep:
+                        ep = highs[i]
+                        af = min(af + af_start, af_max)
+            else:
+                sar = sar + af * (ep - sar)
+                if highs[i] > sar:
+                    uptrend = True
+                    sar = ep
+                    ep = highs[i]
+                    af = af_start
+                else:
+                    if lows[i] < ep:
+                        ep = lows[i]
+                        af = min(af + af_start, af_max)
+        signal = "bullish" if uptrend else "bearish"
+        return IndicatorResult(name="ParabolicSAR", value=Decimal(str(sar)), signal=signal, metadata={"af": af, "uptrend": uptrend})
+
+    @staticmethod
+    def roc(prices: list[Decimal], period: int = 12) -> Optional[IndicatorResult]:
+        if len(prices) < period + 1:
+            return None
+        roc = (prices[-1] - prices[-period - 1]) / prices[-period - 1] * Decimal("100")
+        signal = "bullish" if roc > 0 else "bearish"
+        return IndicatorResult(name="ROC", value=roc, signal=signal, metadata={"period": period})
+
+    @staticmethod
+    def williams_alligator(highs: list[Decimal], lows: list[Decimal], closes: list[Decimal], jaw: int = 13, teeth: int = 8, lips: int = 5) -> Optional[IndicatorResult]:
+        if len(closes) < jaw:
+            return None
+        jaw_sma = TechnicalIndicators.sma(closes, jaw)
+        teeth_sma = TechnicalIndicators.sma(closes, teeth)
+        lips_sma = TechnicalIndicators.sma(closes, lips)
+        if jaw_sma is None or teeth_sma is None or lips_sma is None:
+            return None
+        signal = "bullish" if lips_sma > teeth_sma > jaw_sma else "bearish" if lips_sma < teeth_sma < jaw_sma else "neutral"
+        return IndicatorResult(name="WilliamsAlligator", value=lips_sma, values=[jaw_sma, teeth_sma, lips_sma], signal=signal, metadata={"jaw": jaw, "teeth": teeth, "lips": lips})

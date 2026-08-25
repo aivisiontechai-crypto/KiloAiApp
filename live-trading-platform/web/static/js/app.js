@@ -77,6 +77,39 @@ function updateDashboard(data) {
         const container = document.getElementById('newsContainer');
         container.innerHTML = data.news.slice(0, 10).map(n => '<div class=\"news-item\"><div class=\"news-title\">' + n.title + '</div><div class=\"news-meta\">' + n.symbol + ' | ' + n.source + ' | Sentiment: ' + (n.sentiment > 0 ? '+' : '') + n.sentiment.toFixed(2) + '</div></div>').join('');
     }
+    if (data.options) {
+        document.getElementById('optDelta').textContent = (data.options.total_delta || 0).toFixed(4);
+        document.getElementById('optGamma').textContent = (data.options.total_gamma || 0).toFixed(4);
+        document.getElementById('optTheta').textContent = (data.options.total_theta || 0).toFixed(4);
+        document.getElementById('optVega').textContent = (data.options.total_vega || 0).toFixed(4);
+        document.getElementById('optRho').textContent = (data.options.total_rho || 0).toFixed(4);
+        if (data.options.positions && data.options.positions.length > 0) {
+            document.getElementById('optIV').textContent = (data.options.positions[0].iv || 0).toFixed(4);
+            const tbody = document.querySelector('#optionsTable tbody');
+            tbody.innerHTML = data.options.positions.map(p => '<tr><td>' + p.symbol + '</td><td>' + p.type + '</td><td>' + p.strike + '</td><td>' + p.quantity + '</td><td>' + p.delta.toFixed(4) + '</td><td>' + p.gamma.toFixed(4) + '</td><td>' + p.theta.toFixed(4) + '</td><td>' + p.vega.toFixed(4) + '</td></tr>').join('');
+        }
+    }
+    if (data.monte_carlo) {
+        const mc = data.monte_carlo;
+        document.getElementById('mcExpected').textContent = (mc.expected_return * 100).toFixed(2) + '%';
+        document.getElementById('mcMedian').textContent = (mc.median_return * 100).toFixed(2) + '%';
+        document.getElementById('mcP95').textContent = (mc.percentile_95 * 100).toFixed(2) + '%';
+        document.getElementById('mcP5').textContent = (mc.percentile_5 * 100).toFixed(2) + '%';
+        document.getElementById('mcMaxDD').textContent = (mc.max_drawdown_avg * 100).toFixed(2) + '%';
+        document.getElementById('mcSuccess').textContent = (mc.success_probability * 100).toFixed(2) + '%';
+    }
+    if (data.performance) {
+        const p = data.performance;
+        document.getElementById('perfPnL').textContent = '$' + (p.total_return || 0).toFixed(2);
+        document.getElementById('perfSharpe').textContent = (p.sharpe_ratio || 0).toFixed(2);
+        document.getElementById('perfSortino').textContent = (p.sortino_ratio || 0).toFixed(2);
+        document.getElementById('perfCalmar').textContent = (p.calmar_ratio || 0).toFixed(2);
+        document.getElementById('perfWinRate').textContent = ((p.win_rate || 0) * 100).toFixed(2) + '%';
+        document.getElementById('perfProfitFactor').textContent = (p.profit_factor || 0).toFixed(2);
+        document.getElementById('perfTrades').textContent = p.total_trades || 0;
+        document.getElementById('perfMaxWins').textContent = p.max_consecutive_wins || 0;
+        document.getElementById('perfMaxLosses').textContent = p.max_consecutive_losses || 0;
+    }
 }
 
 async function startPlatform() {

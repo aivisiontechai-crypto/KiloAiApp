@@ -17,6 +17,8 @@ from src.engine.alerts import AlertCondition, AlertManager
 from src.engine.autonomous_trader import AutonomousTrader, RiskManager
 from src.engine.execution_engine import ExecutionEngine
 from src.engine.news import NewsSentimentEngine
+from src.engine.options import OptionsEngine
+from src.engine.performance import PerformanceAttribution
 from src.engine.risk import RiskAnalyzer
 from src.engine.watchlist import WatchlistManager
 from src.portfolio.portfolio import Portfolio
@@ -360,6 +362,71 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
             await writer.drain()
 
+        elif path == "/api/options/greeks" and method == "GET":
+            result = {}
+            if trader:
+                options_engine = OptionsEngine()
+                current_prices = {s: float(p.value) for s, p in trader._last_price.items()}
+                result = options_engine.calculate_portfolio_greeks(current_prices)
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/ai/monte-carlo" and method == "GET":
+            result = {}
+            if trader and data_manager:
+                try:
+                    from src.ai.monte_carlo import MonteCarloBacktester
+                    adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                    if adapter:
+                        import asyncio as _asyncio
+                        loop = _asyncio.get_event_loop()
+                        candles = loop.run_until_complete(adapter.get_historical_candles("BTC-USD", limit=100))
+                        if candles:
+                            backtest = BacktestEngine()
+                            mc = MonteCarloBacktester(backtest, simulations=500)
+                            mc_result = mc.run_monte_carlo(None, candles, AssetClass.CRYPTO)
+                            result = {
+                                "expected_return": mc_result.expected_return,
+                                "std_dev": mc_result.std_dev,
+                                "median_return": mc_result.median_return,
+                                "percentile_5": mc_result.percentile_5,
+                                "percentile_95": mc_result.percentile_95,
+                                "max_drawdown_avg": mc_result.max_drawdown_avg,
+                                "success_probability": mc_result.success_probability,
+                            }
+                except Exception as exc:
+                    logger.error("Monte Carlo error: %s", exc)
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
+        elif path == "/api/performance" and method == "GET":
+            result = {}
+            if trader:
+                perf = PerformanceAttribution()
+                all_trades = []
+                for ac, trade_list in trader.portfolio.get_trades().items():
+                    all_trades.extend(trade_list)
+                metrics = perf.calculate_metrics(all_trades)
+                result = {
+                    "total_return": metrics.total_return,
+                    "sharpe_ratio": metrics.sharpe_ratio,
+                    "sortino_ratio": metrics.sortino_ratio,
+                    "calmar_ratio": metrics.calmar_ratio,
+                    "max_drawdown": metrics.max_drawdown,
+                    "win_rate": metrics.win_rate,
+                    "profit_factor": metrics.profit_factor,
+                    "avg_win": metrics.avg_win,
+                    "avg_loss": metrics.avg_loss,
+                    "total_trades": metrics.total_trades,
+                    "winning_trades": metrics.winning_trades,
+                    "losing_trades": metrics.losing_trades,
+                }
+            body_out = json_dumps(result).encode()
+            writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body_out)).encode() + b"\r\n\r\n" + body_out)
+            await writer.drain()
+
         else:
             writer.write(b"HTTP/1.1 404 Not Found\r\n\r\n")
             await writer.drain()
@@ -461,6 +528,61 @@ async def _dashboard_broadcast_loop() -> None:
                 if trader.news_engine:
                     for symbol in list(trader._last_price.keys()):
                         news.extend(trader.news_engine.fetch_news(symbol, 2))
+                options_data = {}
+                if hasattr(trader, 'risk_analyzer'):
+                    current_prices = {s: float(p.value) for s, p in trader._last_price.items()}
+                    options_engine = OptionsEngine()
+                    options_data = options_engine.calculate_portfolio_greeks(current_prices)
+                monte_carlo_data = {}
+                if data_manager:
+                    try:
+                        adapter = data_manager.get_adapter(AssetClass.CRYPTO)
+                        if adapter:
+                            import asyncio as _asyncio
+                            loop = _asyncio.get_event_loop()
+                            candles = loop.run_until_complete(adapter.get_historical_candles("BTC-USD", limit=100))
+                            if candles:
+                                from src.ai.backtest_engine import BacktestEngine
+                                from src.ai.monte_carlo import MonteCarloBacktester
+                                backtest = BacktestEngine()
+                                mc = MonteCarloBacktester(backtest, simulations=500)
+                                mc_result = mc.run_monte_carlo(None, candles, AssetClass.CRYPTO)
+                                monte_carlo_data = {
+                                    "expected_return": mc_result.expected_return,
+                                    "median_return": mc_result.median_return,
+                                    "percentile_5": mc_result.percentile_5,
+                                    "percentile_95": mc_result.percentile_95,
+                                    "max_drawdown_avg": mc_result.max_drawdown_avg,
+                                    "success_probability": mc_result.success_probability,
+                                }
+                    except Exception as exc:
+                        logger.error("Monte Carlo error: %s", exc)
+                performance_data = {}
+                try:
+                    from src.engine.performance import PerformanceAttribution
+                    perf = PerformanceAttribution()
+                    all_trades = []
+                    for ac, trade_list in trader.portfolio.get_trades().items():
+                        all_trades.extend(trade_list)
+                    metrics = perf.calculate_metrics(all_trades)
+                    performance_data = {
+                        "total_return": metrics.total_return,
+                        "sharpe_ratio": metrics.sharpe_ratio,
+                        "sortino_ratio": metrics.sortino_ratio,
+                        "calmar_ratio": metrics.calmar_ratio,
+                        "max_drawdown": metrics.max_drawdown,
+                        "win_rate": metrics.win_rate,
+                        "profit_factor": metrics.profit_factor,
+                        "avg_win": metrics.avg_win,
+                        "avg_loss": metrics.avg_loss,
+                        "total_trades": metrics.total_trades,
+                        "winning_trades": metrics.winning_trades,
+                        "losing_trades": metrics.losing_trades,
+                        "max_consecutive_wins": metrics.max_consecutive_wins,
+                        "max_consecutive_losses": metrics.max_consecutive_losses,
+                    }
+                except Exception as exc:
+                    logger.error("Performance error: %s", exc)
                 await broadcast_ws({
                     "type": "dashboard",
                     "data": {
@@ -471,6 +593,9 @@ async def _dashboard_broadcast_loop() -> None:
                         "health": health,
                         "risk": risk,
                         "news": [{"id": n.id, "symbol": n.symbol, "title": n.title, "source": n.source, "sentiment": n.sentiment, "timestamp": n.timestamp.isoformat()} for n in news],
+                        "options": options_data,
+                        "monte_carlo": monte_carlo_data,
+                        "performance": performance_data,
                     },
                 })
             await asyncio.sleep(2)

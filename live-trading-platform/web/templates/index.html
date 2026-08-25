@@ -143,6 +143,51 @@
             <h2>Market News & Sentiment</h2>
             <div id="newsContainer" class="news-container"></div>
         </section>
+
+        <section class="panel">
+            <h2>Options Greeks</h2>
+            <div class="metrics-grid" id="optionsGreeks">
+                <div class="metric"><span class="label">Delta</span><span id="optDelta" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Gamma</span><span id="optGamma" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Theta</span><span id="optTheta" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Vega</span><span id="optVega" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Rho</span><span id="optRho" class="value">0.00</span></div>
+                <div class="metric"><span class="label">IV</span><span id="optIV" class="value">0.00</span></div>
+            </div>
+            <div class="table-container">
+                <table id="optionsTable">
+                    <thead><tr><th>Symbol</th><th>Type</th><th>Strike</th><th>Qty</th><th>Delta</th><th>Gamma</th><th>Theta</th><th>Vega</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Monte Carlo Simulation</h2>
+            <div class="metrics-grid" id="monteCarlo">
+                <div class="metric"><span class="label">Expected Return</span><span id="mcExpected" class="value">0.00%</span></div>
+                <div class="metric"><span class="label">Median Return</span><span id="mcMedian" class="value">0.00%</span></div>
+                <div class="metric"><span class="label">95th Percentile</span><span id="mcP95" class="value">0.00%</span></div>
+                <div class="metric"><span class="label">5th Percentile</span><span id="mcP5" class="value">0.00%</span></div>
+                <div class="metric"><span class="label">Max DD (Avg)</span><span id="mcMaxDD" class="value">0.00%</span></div>
+                <div class="metric"><span class="label">Success Probability</span><span id="mcSuccess" class="value">0.00%</span></div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Performance Attribution</h2>
+            <div class="metrics-grid" id="performance">
+                <div class="metric"><span class="label">Total PnL</span><span id="perfPnL" class="value">$0.00</span></div>
+                <div class="metric"><span class="label">Sharpe Ratio</span><span id="perfSharpe" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Sortino Ratio</span><span id="perfSortino" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Calmar Ratio</span><span id="perfCalmar" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Win Rate</span><span id="perfWinRate" class="value">0.00%</span></div>
+                <div class="metric"><span class="label">Profit Factor</span><span id="perfProfitFactor" class="value">0.00</span></div>
+                <div class="metric"><span class="label">Total Trades</span><span id="perfTrades" class="value">0</span></div>
+                <div class="metric"><span class="label">Max Consecutive Wins</span><span id="perfMaxWins" class="value">0</span></div>
+                <div class="metric"><span class="label">Max Consecutive Losses</span><span id="perfMaxLosses" class="value">0</span></div>
+            </div>
+        </section>
     </div>
 
     <script src="/static/js/app.js"></script>
